@@ -39,15 +39,25 @@ class LogRoot : private Uncopyable
 
 public:
 
-	LogRoot(const LogRoot&, char const* alias_);
+	LogRoot(ILogHandler* pHandler, char const* alias, LogFilters filters);
 
-	LogRoot(ILogHandler* pHandler_, char const* alias_, const LogFilters& filters);
+	LogRoot(LogRoot&& other);
+
+	LogRoot(const LogRoot&, char const* alias);
 
 	~LogRoot();
 
+	void Rename(char const* alias);
+
+	const char* GetId() const;
+
 	void Log(const LogFilters& filters, char const* location, char const* message, int errorCode);
 
-	Logger GetLogger();
+	// create another log root, but change the alias
+	LogRoot Clone(char const* alias) const;
+
+	// create another log root, but change the alias and the filters
+	LogRoot Clone(char const* alias, LogFilters filters) const;
 
 	bool IsEnabled(const LogFilters& rhs) const;
 
@@ -57,11 +67,15 @@ public:
 
 	const LogFilters& GetFilters() const;
 
+	Logger  logger;
+
 private:
 
-	ILogHandler*	pHandler;
-	LogFilters		filters;   // bit field describing what is being logged
-	char*           alias;
+	LogRoot(ILogHandler* pHandler, char const* alias, LogFilters filters, bool reuseAlias);
+
+	ILogHandler*	m_handler;
+	LogFilters		m_filters;   // bit field describing what is being logged
+	const char*     m_alias;
 
 };
 

@@ -18,28 +18,35 @@
  * may have been made to this file. Automatak, LLC licenses these modifications
  * to you under the terms of the License.
  */
+#ifndef ASIODNP3_ISESSION_ACCEPTOR_H
+#define ASIODNP3_ISESSION_ACCEPTOR_H
 
-#ifndef ASIOPAL_TLS_HELPERS_H
-#define ASIOPAL_TLS_HELPERS_H
+#include <opendnp3/master/ISOEHandler.h>
+#include <opendnp3/master/IMasterApplication.h>
+#include <opendnp3/master/MasterStackConfig.h>
 
-#include "asiopal/tls/TLSConfig.h"
+#include "asiodnp3/IMasterSession.h"
 
-#include <openpal/util/Uncopyable.h>
+#include <memory>
 
-#include <asio/ssl.hpp>
-
-namespace asiopal
+namespace asiodnp3
 {
 
 /**
-* Implementation of a TCP client
+* Callback interface invoked when a new connection is accepted
 */
-class TLSHelpers : openpal::StaticOnly
+class ISessionAcceptor
 {
 public:
 
-	/// Configure an ssl context using the settings in a TLSConfig struct
-	static void ApplyConfig(const TLSConfig&, asio::ssl::context& context);
+	virtual ~ISessionAcceptor() {}
+
+	virtual std::shared_ptr<IMasterSession> AcceptSession(
+	    const std::string& sessionid,
+	    std::shared_ptr<opendnp3::ISOEHandler> SOEHandler,
+	    std::shared_ptr<opendnp3::IMasterApplication> application,
+	    const opendnp3::MasterStackConfig& config
+	) = 0;
 };
 
 }

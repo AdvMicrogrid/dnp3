@@ -30,11 +30,11 @@ namespace opendnp3
 SerialTestObject::SerialTestObject(SerialSettings cfg, uint32_t filters, bool aImmediate) :
 	TestObjectASIO(),
 	log(),
-	mPort(log.root, this->GetService(), cfg),
-	mAdapter(log.GetLogger(), &mPort, true)
+	port(log.root.logger, this->GetService(), cfg),
+	adapter(port, true)
 {
-	mAdapter.SetUpperLayer(mUpper);
-	mUpper.SetLowerLayer(mAdapter);
+	adapter.SetUpperLayer(upper);
+	upper.SetLowerLayer(adapter);
 }
 
 }

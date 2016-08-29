@@ -148,5 +148,3 @@ IINField CommandSetOps::ProcessHeader(const PrefixHeader& header, const ICollect
 
 
 }
-
-

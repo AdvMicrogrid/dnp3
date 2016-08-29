@@ -21,8 +21,6 @@
 
 #include "asiopal/tls/PhysicalLayerTLSServer.h"
 
-#include "asiopal/tls/TLSHelpers.h"
-
 #include <openpal/logging/LogMacros.h>
 #include <openpal/channel/IPhysicalLayerCallbacks.h>
 #include <openpal/logging/LogLevels.h>
@@ -35,13 +33,14 @@ namespace asiopal
 {
 
 PhysicalLayerTLSServer::PhysicalLayerTLSServer(
-    openpal::LogRoot& root,
+    openpal::Logger logger,
     asio::io_service& service,
     const std::string& endpoint,
     uint16_t port,
-    const TLSConfig& config) :
+    const TLSConfig& config,
+    std::error_code& ec) :
 
-	PhysicalLayerTLSBase(root, service, config, asio::ssl::context_base::sslv23_server),
+	PhysicalLayerTLSBase(logger, service, config, true, ec),
 	localEndpointString(endpoint),
 	localEndpoint(ip::tcp::v4(), port),
 	acceptor(service)
@@ -72,7 +71,7 @@ void PhysicalLayerTLSServer::DoOpen()
 		{
 			this->HandleAcceptResult(code);
 		};
-		acceptor.async_accept(stream->lowest_layer(), remoteEndpoint, executor.strand.wrap(callback));
+		acceptor.async_accept(stream.lowest_layer(), remoteEndpoint, executor.strand.wrap(callback));
 	}
 }
 
@@ -89,7 +88,7 @@ void PhysicalLayerTLSServer::HandleAcceptResult(const std::error_code& ec)
 			this->OnOpenCallback(code);
 		};
 
-		this->stream->async_handshake(asio::ssl::stream_base::server, executor.strand.wrap(callback));
+		this->stream.async_handshake(asio::ssl::stream_base::server, executor.strand.wrap(callback));
 	}
 }
 

@@ -21,8 +21,6 @@
 
 #include "asiopal/tls/PhysicalLayerTLSBase.h"
 
-#include "asiopal/tls/TLSHelpers.h"
-
 #include <openpal/logging/LogMacros.h>
 #include <openpal/logging/LogLevels.h>
 
@@ -34,27 +32,22 @@ namespace asiopal
 {
 
 PhysicalLayerTLSBase::PhysicalLayerTLSBase(
-    openpal::LogRoot& root,
+    openpal::Logger logger,
     asio::io_service& service,
     const TLSConfig& config,
-    asio::ssl::context_base::method method) :
+    bool server,
+    std::error_code& ec) :
 
-	PhysicalLayerASIO(root, service),
-	ctx(method)
+	PhysicalLayerASIO(logger, service),
+	ctx(logger, server, config, ec),
+	stream(service, ctx.value)
 {
-
-	TLSHelpers::ApplyConfig(config, ctx);
-
-	ctx.set_verify_callback(
+	stream.set_verify_callback(
 	    [this](bool preverified, asio::ssl::verify_context & ctx)
 	{
 		return this->LogPeerCertificateInfo(preverified, ctx);
 	}
 	);
-
-	/// Now with all of this configured, we can create the stream class
-	/// The order is important since the socket object inerhits all the settings from the context
-	this->stream = std::unique_ptr<asio::ssl::stream<asio::ip::tcp::socket>>(new asio::ssl::stream<asio::ip::tcp::socket>(service, ctx));
 }
 
 bool PhysicalLayerTLSBase::LogPeerCertificateInfo(bool preverified, asio::ssl::verify_context& ctx)
@@ -89,7 +82,7 @@ void PhysicalLayerTLSBase::DoRead(openpal::WSlice& dest)
 		this->OnReadCallback(ec, pBuff, static_cast<uint32_t>(numRead));
 	};
 
-	stream->async_read_some(buffer(pBuff, dest.Size()), executor.strand.wrap(callback));
+	stream.async_read_some(buffer(pBuff, dest.Size()), executor.strand.wrap(callback));
 }
 
 void PhysicalLayerTLSBase::DoWrite(const openpal::RSlice& data)
@@ -99,7 +92,7 @@ void PhysicalLayerTLSBase::DoWrite(const openpal::RSlice& data)
 		this->OnWriteCallback(code, static_cast<uint32_t>(numWritten));
 	};
 
-	async_write(*stream, buffer(data, data.Size()), executor.strand.wrap(callback));
+	async_write(stream, buffer(data, data.Size()), executor.strand.wrap(callback));
 }
 
 void PhysicalLayerTLSBase::DoOpenFailure()
@@ -112,7 +105,7 @@ void PhysicalLayerTLSBase::DoOpenFailure()
 void PhysicalLayerTLSBase::ShutdownTLSStream()
 {
 	std::error_code ec;
-	stream->shutdown(ec);
+	stream.shutdown(ec);
 	if (ec)
 	{
 		FORMAT_LOG_BLOCK(logger, logflags::DBG, "Error while shutting down TLS stream: %s", ec.message().c_str());
@@ -123,7 +116,7 @@ void PhysicalLayerTLSBase::ShutdownSocket()
 {
 
 	std::error_code ec;
-	stream->lowest_layer().shutdown(ip::tcp::socket::shutdown_both, ec);
+	stream.lowest_layer().shutdown(ip::tcp::socket::shutdown_both, ec);
 	if (ec)
 	{
 		FORMAT_LOG_BLOCK(logger, logflags::DBG, "Error shutting down socket: %s", ec.message().c_str());
@@ -133,7 +126,7 @@ void PhysicalLayerTLSBase::ShutdownSocket()
 void PhysicalLayerTLSBase::CloseSocket()
 {
 	std::error_code ec;
-	stream->lowest_layer().close(ec);
+	stream.lowest_layer().close(ec);
 	if (ec)
 	{
 		FORMAT_LOG_BLOCK(logger, logflags::DBG, "Error closing socket: %s", ec.message().c_str());

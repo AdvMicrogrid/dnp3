@@ -70,14 +70,11 @@ public:
 
 	void Pop(openpal::ILogHandler& log);
 
-	openpal::Logger GetLogger();
-
 	openpal::LogRoot root;
 
 protected:
 
 	bool outputToStdIO;
-	openpal::Logger logger;
 	std::deque<LogRecord> messages;
 
 };

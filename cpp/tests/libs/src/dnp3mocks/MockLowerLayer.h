@@ -24,8 +24,6 @@
 #include <queue>
 #include <string>
 
-#include <openpal/logging/LogRoot.h>
-
 #include <opendnp3/LayerInterfaces.h>
 
 namespace opendnp3
@@ -34,7 +32,6 @@ namespace opendnp3
 class MockLowerLayer : public ILowerLayer, public HasUpperLayer
 {
 public:
-	MockLowerLayer(openpal::LogRoot& root);
 
 	void SendUp(const openpal::RSlice& arBuffer);
 	void SendUp(const std::string&);
@@ -55,8 +52,6 @@ public:
 	virtual void BeginTransmit(const openpal::RSlice& arBuffer) override final;
 
 private:
-
-	openpal::Logger logger;
 
 	std::queue<openpal::RSlice> sendQueue;
 };
