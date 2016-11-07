@@ -49,8 +49,7 @@ LogRecord::LogRecord(const LogEntry& entry) :
 
 MockLogHandler::MockLogHandler(uint32_t filters) :
 	root(this, "test", filters),
-	outputToStdIO(false),
-	logger(root.GetLogger())
+	outputToStdIO(false)
 {
 
 }
@@ -139,7 +138,7 @@ int MockLogHandler::ClearLog()
 
 void MockLogHandler::Log(const std::string& location, const std::string& message)
 {
-	logger.Log(openpal::logflags::EVENT, location.c_str(), message.c_str());
+	root.logger.Log(openpal::logflags::EVENT, location.c_str(), message.c_str());
 }
 
 void MockLogHandler::WriteToStdIo()
@@ -181,11 +180,6 @@ void MockLogHandler::Pop(openpal::ILogHandler& log)
 		LogEntry le(record.id.c_str(), record.filters, record.location.c_str(), record.message.c_str(), record.errorCode);
 		log.Log(le);
 	}
-}
-
-openpal::Logger MockLogHandler::GetLogger()
-{
-	return root.GetLogger();
 }
 
 bool MockLogHandler::IsLogErrorFree()

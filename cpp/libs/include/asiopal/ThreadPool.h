@@ -18,8 +18,8 @@
  * may have been made to this file. Automatak, LLC licenses these modifications
  * to you under the terms of the License.
  */
-#ifndef ASIOPAL_IOSERVICETHREADPOOL_H
-#define ASIOPAL_IOSERVICETHREADPOOL_H
+#ifndef ASIOPAL_THREADPOOL_H
+#define ASIOPAL_THREADPOOL_H
 
 #include <openpal/logging/LogRoot.h>
 
@@ -27,8 +27,9 @@
 
 #include <functional>
 #include <thread>
+#include <memory>
 
-#include <asiopal/SteadyClock.h>
+#include "asiopal/SteadyClock.h"
 
 namespace asiopal
 {
@@ -36,11 +37,13 @@ namespace asiopal
 /**
 *	A thread pool that calls asio::io_service::run
 */
-class IOServiceThreadPool
+class ThreadPool
 {
 public:
 
-	IOServiceThreadPool(
+	friend class ThreadPoolTest;
+
+	ThreadPool(
 	    openpal::ILogHandler* pHandler,
 	    uint32_t levels,
 	    uint32_t aConcurrency,
@@ -48,7 +51,15 @@ public:
 	std::function<void()> onThreadExit = []() {}
 	);
 
-	~IOServiceThreadPool();
+	static std::shared_ptr<ThreadPool> Create(
+	    openpal::ILogHandler* pHandler,
+	    uint32_t levels,
+	    uint32_t concurrency,
+	std::function<void()> onThreadStart = []() {},
+	std::function<void()> onThreadExit = []() {}
+	);
+
+	~ThreadPool();
 
 	asio::io_service& GetIOService();
 
@@ -57,7 +68,6 @@ public:
 private:
 
 	openpal::LogRoot root;
-	openpal::Logger logger;
 
 	std::function<void ()> onThreadStart;
 	std::function<void ()> onThreadExit;
@@ -66,7 +76,7 @@ private:
 
 	void Run();
 
-	asio::io_service ioservice;
+	std::shared_ptr<asio::io_service> ioservice;
 	asio::basic_waitable_timer< asiopal::asiopal_steady_clock > infiniteTimer;
 	std::vector<std::thread*> threads;
 };

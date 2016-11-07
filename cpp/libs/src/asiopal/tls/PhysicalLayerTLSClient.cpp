@@ -22,7 +22,6 @@
 #include "asiopal/tls/PhysicalLayerTLSClient.h"
 
 #include "asiopal/SocketHelpers.h"
-#include "asiopal/tls/TLSHelpers.h"
 
 using namespace asio;
 using namespace asiopal;
@@ -31,14 +30,15 @@ namespace asiopal
 {
 
 PhysicalLayerTLSClient::PhysicalLayerTLSClient(
-    openpal::LogRoot& root,
+    openpal::Logger logger,
     asio::io_service& service,
     const std::string& host_,
     const std::string& localAddress_,
     uint16_t port,
-    const TLSConfig& config
+    const TLSConfig& config,
+    std::error_code& ec
 ) :
-	PhysicalLayerTLSBase(root, service, config, ssl::context_base::sslv23_client),
+	PhysicalLayerTLSBase(logger, service, config, false, ec),
 	condition(logger),
 	host(host_),
 	localAddress(localAddress_),
@@ -53,7 +53,7 @@ PhysicalLayerTLSClient::PhysicalLayerTLSClient(
 void PhysicalLayerTLSClient::DoOpen()
 {
 	std::error_code ec;
-	SocketHelpers::BindToLocalAddress(localAddress, localEndpoint, this->stream->lowest_layer(), ec);
+	SocketHelpers::BindToLocalAddress(localAddress, localEndpoint, this->stream.lowest_layer(), ec);
 	if (ec)
 	{
 		auto callback = [this, ec]()
@@ -82,7 +82,7 @@ void PhysicalLayerTLSClient::DoOpen()
 			this->HandleConnectResult(ec);
 		};
 
-		stream->lowest_layer().async_connect(remoteEndpoint, executor.strand.wrap(callback));
+		stream.lowest_layer().async_connect(remoteEndpoint, executor.strand.wrap(callback));
 	}
 
 }
@@ -112,7 +112,7 @@ void PhysicalLayerTLSClient::HandleResolveResult(const std::error_code& ec, asio
 			this->HandleConnectResult(code);
 		};
 
-		asio::async_connect(stream->lowest_layer(), endpoints, condition, executor.strand.wrap(callback));
+		asio::async_connect(stream.lowest_layer(), endpoints, condition, executor.strand.wrap(callback));
 	}
 }
 
@@ -129,7 +129,7 @@ void PhysicalLayerTLSClient::HandleConnectResult(const std::error_code& ec)
 			this->OnOpenCallback(code);
 		};
 
-		this->stream->async_handshake(asio::ssl::stream_base::client, executor.strand.wrap(callback));
+		this->stream.async_handshake(asio::ssl::stream_base::client, executor.strand.wrap(callback));
 	}
 }
 

@@ -36,6 +36,7 @@ class OutstationStack: public OutstationStackBase<IOutstation>
 public:
 
 	/// standard DNP3 constructor
+
 	OutstationStack(
 	    std::unique_ptr<openpal::LogRoot> root,
 	    openpal::IExecutor& executor,

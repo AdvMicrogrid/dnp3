@@ -47,7 +47,6 @@ MContext::MContext(
     const MasterParams& params_,
     ITaskLock& taskLock
 ) :
-
 	logger(logger),
 	pExecutor(&executor),
 	pLower(&lower),
@@ -222,7 +221,7 @@ void MContext::ProcessAPDU(const APDUResponseHeader& header, const RSlice& objec
 
 void MContext::ProcessIIN(const IINField& iin)
 {
-	if (iin.IsSet(IINBit::DEVICE_RESTART))
+	if (iin.IsSet(IINBit::DEVICE_RESTART) && !this->params.ignoreRestartIIN)
 	{
 		this->tasks.clearRestart.Demand();
 		this->tasks.assignClass.Demand();
@@ -237,7 +236,14 @@ void MContext::ProcessIIN(const IINField& iin)
 
 	if (iin.IsSet(IINBit::NEED_TIME))
 	{
-		this->tasks.timeSync.Demand();
+		switch (this->params.timeSyncMode)
+		{
+			case(TimeSyncMode::SerialTimeSync):
+				this->tasks.timeSync.Demand();
+				break;
+			default:
+				break;
+		}
 	}
 
 	if ((iin.IsSet(IINBit::CLASS1_EVENTS) && this->params.eventScanOnEventsAvailableClassMask.HasClass1()) ||

@@ -18,29 +18,40 @@
  * may have been made to this file. Automatak, LLC licenses these modifications
  * to you under the terms of the License.
  */
-#ifndef OPENDNP3_ILINKROUTER_H
-#define OPENDNP3_ILINKROUTER_H
+#ifndef ASIODNP3_DEFAULTLISTENCALLBACKS_H
+#define ASIODNP3_DEFAULTLISTENCALLBACKS_H
 
-#include <openpal/container/RSlice.h>
+#include "asiodnp3/IListenCallbacks.h"
+#include "asiodnp3/PrintingSOEHandler.h"
+#include "asiodnp3/DefaultMasterApplication.h"
 
-#include "opendnp3/link/ILinkSession.h"
-
-namespace opendnp3
+namespace asiodnp3
 {
 
-// @section DESCRIPTION Interface the link layer uses to transmit data
-
-class ILinkRouter
+/**
+* Callback interface invoked when a new connection is accepted
+*/
+class DefaultListenCallbacks final : public IListenCallbacks
 {
 public:
 
-	virtual ~ILinkRouter() {}
+	DefaultListenCallbacks();
 
-	/**
-	* Begin transmission of a frame. Callback happens OFF the call stack (via executor)
-	*/
-	virtual void BeginTransmit(const openpal::RSlice& buffer, ILinkSession* pContext) = 0;
+	virtual ~DefaultListenCallbacks() {}
 
+	virtual bool AcceptConnection(uint64_t sessionid, const std::string& ipaddress) override;
+
+	virtual bool AcceptCertificate(uint64_t sessionid, const X509Info& info) override;
+
+	virtual openpal::TimeDuration GetFirstFrameTimeout() override;
+
+	virtual void OnFirstFrame(uint64_t sessionid, const opendnp3::LinkHeaderFields& header, ISessionAcceptor& acceptor) override;
+
+	virtual void OnConnectionClose(uint64_t sessionid, std::shared_ptr<IMasterSession> session) override;
+
+private:
+
+	std::string SessionIdToString(uint64_t id);
 };
 
 }

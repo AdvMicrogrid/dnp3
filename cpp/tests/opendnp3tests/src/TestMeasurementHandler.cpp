@@ -118,11 +118,10 @@ ParseResult TestObjectHeaders(const std::string& objects, ParseResult expectedRe
 {
 	MockSOEHandler soe;
 	testlib::MockLogHandler log;
-	auto logger = log.GetLogger();
 
 	HexSequence hex(objects);
 
-	auto result = MeasurementHandler::ProcessMeasurements(hex.ToRSlice(), logger, &soe);
+	auto result = MeasurementHandler::ProcessMeasurements(hex.ToRSlice(), log.root.logger, &soe);
 	REQUIRE(result == expectedResult);
 	verify(soe);
 	return result;
