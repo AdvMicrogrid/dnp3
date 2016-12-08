@@ -24,31 +24,44 @@
 namespace asiopal
 {
 
-TLSStreamChannel::TLSStreamChannel(std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> stream) : m_stream(stream)
+TLSStreamChannel::TLSStreamChannel(const std::shared_ptr<Executor>& executor, const std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>>& stream) :
+	IAsyncChannel(executor),
+	stream(stream)
 {}
 
-std::unique_ptr<IAsyncChannel> TLSStreamChannel::Create(std::shared_ptr<asio::ssl::stream<asio::ip::tcp::socket>> stream)
+void TLSStreamChannel::BeginReadImpl(openpal::WSlice dest)
 {
-	return std::unique_ptr<IAsyncChannel>(new TLSStreamChannel(stream));
+	auto callback = [this](const std::error_code & ec, size_t num)
+	{
+		this->OnReadCallback(ec, num);
+	};
+
+	stream->async_read_some(asio::buffer(dest, dest.Size()), this->executor->strand.wrap(callback));
 }
 
-void TLSStreamChannel::BeginRead(openpal::WSlice& dest, const ReadCallbackT& callback)
+void TLSStreamChannel::BeginWriteImpl(const openpal::RSlice& data)
 {
-	m_stream->async_read_some(asio::buffer(dest, dest.Size()), callback);
+	auto callback = [this](const std::error_code & ec, size_t num)
+	{
+		this->OnWriteCallback(ec, num);
+	};
+
+	asio::async_write(*stream, asio::buffer(data, data.Size()), this->executor->strand.wrap(callback));
 }
 
-void TLSStreamChannel::BeginWrite(const openpal::RSlice& data, const WriteCallbackT& callback)
+void TLSStreamChannel::ShutdownImpl()
 {
-	asio::async_write(*m_stream, asio::buffer(data, data.Size()), callback);
-}
-
-void TLSStreamChannel::BeginShutdown(const ShutdownCallbackT& callback)
-{
-	// TODO - should we perform an async shutdown on the TLS stream?
 	std::error_code ec;
-	m_stream->lowest_layer().shutdown(asio::socket_base::shutdown_both, ec);
-	m_stream->lowest_layer().close(ec);
-	callback();
+
+	auto callback = [stream = stream](const std::error_code & ec)
+	{
+		// regardless of what happens with the TLS shutdown, close the socket now
+		std::error_code ec1;
+		stream->lowest_layer().shutdown(asio::socket_base::shutdown_both, ec1);
+		stream->lowest_layer().close(ec1);
+	};
+
+	stream->async_shutdown(callback);
 }
 
 }

@@ -21,10 +21,8 @@
 #ifndef ASIODNP3_IOUTSTATION_H
 #define ASIODNP3_IOUTSTATION_H
 
-#include "IStack.h"
-
-#include <opendnp3/outstation/IDatabase.h>
-#include <opendnp3/outstation/DatabaseConfigView.h>
+#include "asiodnp3/IStack.h"
+#include "asiodnp3/Updates.h"
 
 #include <openpal/logging/LogFilters.h>
 
@@ -33,10 +31,6 @@ namespace asiodnp3
 
 /**
 * Interface representing a running outstation.
-* To get a data observer interface to load measurements on the outstation:-
-\code
-	IMeasurementLoader* pDataObserver = pOutstation->GetDataObserver()
-\endcode
 */
 class IOutstation : public IStack
 {
@@ -58,34 +52,9 @@ public:
 	virtual void SetRestartIIN() = 0;
 
 	/**
-	* @return stack statistics counters
+	* Apply a set of measurement updates to the outstation
 	*/
-	virtual opendnp3::StackStatistics GetStackStatistics() = 0;
-
-	/**
-	* Get a view of the raw buffers in the database. This can be used to configure each point before execution.
-	* @return View of static values and metadata.
-	*/
-	virtual opendnp3::DatabaseConfigView GetConfigView() = 0;
-
-protected:
-
-	//// --- These methods are protected and are only intened to be used by the MeasUpdate friend class ----
-
-	/*
-	* return the non-thread safe database the outstation uses
-	*/
-	virtual opendnp3::IDatabase& GetDatabase() = 0;
-
-	/*
-	* return the executor used by the outstation
-	*/
-	virtual openpal::IExecutor& GetExecutor() = 0;
-
-	/*
-	* force the outstation to check for updates
-	*/
-	virtual void CheckForUpdates() = 0;
+	virtual void Apply(const Updates& updates) = 0;
 
 };
 

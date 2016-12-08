@@ -21,101 +21,74 @@
 #ifndef ASIODNP3_DNP3CHANNEL_H
 #define ASIODNP3_DNP3CHANNEL_H
 
-#include <openpal/logging/LogRoot.h>
-
-#include <opendnp3/outstation/OutstationStackConfig.h>
-#include <opendnp3/link/LinkChannelStatistics.h>
-#include <opendnp3/link/ChannelRetry.h>
-
-#include <asiopal/ASIOExecutor.h>
-#include <asiopal/Synchronized.h>
-#include <asiopal/PhysicalLayerASIO.h>
 
 #include "asiodnp3/IChannel.h"
-#include "asiodnp3/StackLifecycle.h"
-#include "asiodnp3/LinkLayerRouter.h"
-
-#include <memory>
-
-namespace opendnp3
-{
-class ICommandHandler;
-class ITimeWriteHandler;
-}
-
+#include "asiodnp3/IOHandler.h"
+#include "asiopal/ResourceManager.h"
+#include "opendnp3/master/MultidropTaskLock.h"
 
 namespace asiodnp3
 {
 
-class IStack;
-class IOutstation;
-
-class DNP3Channel : public IChannel, private opendnp3::IChannelStateListener
+class DNP3Channel final : public IChannel, public std::enable_shared_from_this<DNP3Channel>
 {
 
 public:
 
 	DNP3Channel(
-	    std::unique_ptr<openpal::LogRoot> root,
-	    const opendnp3::ChannelRetry& retry,
-	    std::unique_ptr<asiopal::PhysicalLayerASIO> phys
+	    const openpal::Logger& logger,
+	    const std::shared_ptr<asiopal::Executor>& executor,
+	    const std::shared_ptr<IOHandler>& iohandler,
+	    const std::shared_ptr<asiopal::IResourceManager>& manager
 	);
+
+	static std::shared_ptr<DNP3Channel> Create(
+	    const openpal::Logger& logger,
+	    const std::shared_ptr<asiopal::Executor>& executor,
+	    const std::shared_ptr<IOHandler>& iohandler,
+	    const std::shared_ptr<asiopal::IResourceManager>& manager)
+	{
+		return std::make_shared<DNP3Channel>(logger, executor, iohandler, manager);
+	}
+
+	~DNP3Channel();
 
 	// ----------------------- Implement IChannel -----------------------
 
-	virtual opendnp3::LinkChannelStatistics GetChannelStatistics() override final;
+	void Shutdown() override;
 
-	void Shutdown() override final;
+	virtual opendnp3::LinkStatistics GetStatistics() override;
 
-	virtual openpal::LogFilters GetLogFilters() const override final;
+	virtual openpal::LogFilters GetLogFilters() const override;
 
-	virtual void SetLogFilters(const openpal::LogFilters& filters) override final;
+	virtual void SetLogFilters(const openpal::LogFilters& filters) override;
 
-	virtual void AddStateListener(const std::function<void(opendnp3::ChannelState)>& listener) override final;
-
-	virtual IMaster* AddMaster(char const* id,
-	                           opendnp3::ISOEHandler& SOEHandler,
-	                           opendnp3::IMasterApplication& application,
-	                           const opendnp3::MasterStackConfig& config) override final;
+	virtual std::shared_ptr<IMaster> AddMaster(const std::string& id,
+	        std::shared_ptr<opendnp3::ISOEHandler> SOEHandler,
+	        std::shared_ptr<opendnp3::IMasterApplication> application,
+	        const MasterStackConfig& config) override;
 
 
 
-	virtual IOutstation* AddOutstation(char const* id,
-	                                   opendnp3::ICommandHandler& commandHandler,
-	                                   opendnp3::IOutstationApplication& application,
-	                                   const opendnp3::OutstationStackConfig& config) override final;
-
-	// -----------------------------------------------------------------------
-
-	// Helper functions only available inside DNP3Manager
-	void SetShutdownHandler(const openpal::Action0& action);
-
+	virtual std::shared_ptr<IOutstation> AddOutstation(const std::string& id,
+	        std::shared_ptr<opendnp3::ICommandHandler> commandHandler,
+	        std::shared_ptr<opendnp3::IOutstationApplication> application,
+	        const OutstationStackConfig& config) override;
 
 private:
 
+	void ShutdownImpl();
+
 	// ----- generic method for adding a stack ------
 	template <class T>
-	T* AddStack(const opendnp3::LinkConfig& link, const std::function<T* ()>& factory);
+	std::shared_ptr<T> AddStack(const opendnp3::LinkConfig& link, const std::shared_ptr<T>& stack);
 
-	void InitiateShutdown(asiopal::Synchronized<bool>& handler);
+	openpal::Logger logger;
+	const std::shared_ptr<asiopal::Executor> executor;
 
-	virtual void OnStateChange(opendnp3::ChannelState state) override final;
-
-	void CheckForFinalShutdown();
-
-	openpal::Action0 shutdownHandler;
-	opendnp3::LinkChannelStatistics statistics;
-
-	std::unique_ptr<asiopal::PhysicalLayerASIO> phys;
-	std::unique_ptr<openpal::LogRoot> root;
-
-	asiopal::Synchronized<bool>* pShutdownHandler;
-
-	opendnp3::ChannelState channelState;
-	std::vector<std::function<void(opendnp3::ChannelState)>> callbacks;
-
-	LinkLayerRouter router;
-	StackLifecycle stacks;
+	std::shared_ptr<IOHandler> iohandler;
+	std::shared_ptr<asiopal::IResourceManager> manager;
+	std::shared_ptr<asiopal::ResourceManager> resources;
 
 };
 

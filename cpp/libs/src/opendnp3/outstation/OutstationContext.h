@@ -36,9 +36,10 @@
 #include "opendnp3/outstation/ResponseContext.h"
 #include "opendnp3/outstation/ICommandHandler.h"
 #include "opendnp3/outstation/IOutstationApplication.h"
+#include "opendnp3/outstation/OutstationStates.h"
 
 #include <openpal/executor/TimerRef.h>
-#include <openpal/logging/LogRoot.h>
+#include <openpal/logging/Logger.h>
 #include <openpal/container/Pair.h>
 
 namespace opendnp3
@@ -49,18 +50,19 @@ namespace opendnp3
 ///
 class OContext : public IUpperLayer
 {
+	friend class StateIdle;
+	friend class StateSolicitedConfirmWait;
+	friend class StateUnsolicitedConfirmWait;
 
 public:
 
 	OContext(	const OutstationConfig& config,
-	            const DatabaseTemplate& dbTemplate,
-	            openpal::Logger logger,
-	            openpal::IExecutor& executor,
-	            ILowerLayer& lower,
-	            ICommandHandler& commandHandler,
-	            IOutstationApplication& application);
-
-public:
+	            const DatabaseSizes& dbSizes,
+	            const openpal::Logger& logger,
+	            const std::shared_ptr<openpal::IExecutor>& executor,
+	            const std::shared_ptr<ILowerLayer>& lower,
+	            const std::shared_ptr<ICommandHandler>& commandHandler,
+	            const std::shared_ptr<IOutstationApplication>& application);
 
 	/// ----- Implement IUpperLayer ------
 
@@ -72,37 +74,31 @@ public:
 
 	virtual bool OnReceive(const openpal::RSlice& fragment) override final;
 
-	/// ---- Helper functions that operate on the current solicited state, and may return a new solicited state ----
+	/// --- Other public members ----
 
-	OutstationSolicitedStateBase* ContinueMultiFragResponse(const AppSeqNum& seq);
+	void CheckForTaskStart();
 
-	OutstationSolicitedStateBase* RespondToNonReadRequest(const APDUHeader& header, const openpal::RSlice& objects);
-
-	OutstationSolicitedStateBase* RespondToReadRequest(const APDUHeader& header, const openpal::RSlice& objects);
-
-	OutstationSolicitedStateBase* ProcessNewRequest(const APDUHeader& header, const openpal::RSlice& objects);
-
-	OutstationSolicitedStateBase* OnReceiveSolRequest(const APDUHeader& header, const openpal::RSlice& objects);
-
-	/// ----- method overridable for implementing SA or other extensions ----
-
-	virtual void ReceiveParsedHeader(const openpal::RSlice& apdu, const APDUHeader& header, const openpal::RSlice& objects);
-
-	virtual void CheckForTaskStart();
-
-	virtual void Increment(SecurityStatIndex index) {}
-
-	/// ---- External helpers ----
-
-	void SetRestartIIN();
-
-	IDatabase& GetDatabase();
+	IUpdateHandler& GetUpdateHanlder();
 
 	DatabaseConfigView GetConfigView();
 
+	void SetRestartIIN();
+
+private:
+
+	/// ---- Helper functions that operate on the current state, and may return a new state ----
+
+	OutstationState& ContinueMultiFragResponse(const AppSeqNum& seq);
+
+	OutstationState& RespondToReadRequest(const APDUHeader& header, const openpal::RSlice& objects);
+
+	OutstationState& ProcessNewRequest(const APDUHeader& header, const openpal::RSlice& objects);
+
+	OutstationState& OnReceiveSolRequest(const APDUHeader& header, const openpal::RSlice& objects);
+
+	void RespondToNonReadRequest(const APDUHeader& header, const openpal::RSlice& objects);
+
 	/// ---- Processing functions --------
-
-
 
 	void ProcessAPDU(const openpal::RSlice& apdu, const APDUHeader& header, const openpal::RSlice& objects);
 
@@ -114,9 +110,9 @@ public:
 
 	void ParseHeader(const openpal::RSlice& apdu);
 
-	void BeginResponseTx(const openpal::RSlice& response);
+	void BeginResponseTx(const AppControlField& control, const openpal::RSlice& response);
 
-	void BeginUnsolTx(const openpal::RSlice& response);
+	void BeginUnsolTx(const AppControlField& control, const openpal::RSlice& response);
 
 	void BeginTx(const openpal::RSlice& response);
 
@@ -124,9 +120,7 @@ public:
 
 	bool ProcessDeferredRequest(APDUHeader header, openpal::RSlice objects);
 
-	bool StartSolicitedConfirmTimer();
-
-	bool StartUnsolicitedConfirmTimer();
+	void RestartConfirmTimer();
 
 	void CheckForUnsolicited();
 
@@ -164,10 +158,10 @@ public:
 
 	// ------ resources --------
 	openpal::Logger logger;
-	openpal::IExecutor* const pExecutor;
-	ILowerLayer* const pLower;
-	ICommandHandler* const pCommandHandler;
-	IOutstationApplication* const pApplication;
+	const std::shared_ptr<openpal::IExecutor> executor;
+	const std::shared_ptr<ILowerLayer> lower;
+	const std::shared_ptr<ICommandHandler> commandHandler;
+	const std::shared_ptr<IOutstationApplication> application;
 
 	// ------ Database, event buffer, and response tracking
 	EventBuffer eventBuffer;
@@ -191,6 +185,7 @@ public:
 	// ------ Dynamic state related to solicited and unsolicited modes ------
 	OutstationSolState  sol;
 	OutstationUnsolState unsol;
+	OutstationState* state = &StateIdle::Inst();
 };
 
 

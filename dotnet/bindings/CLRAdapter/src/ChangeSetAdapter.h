@@ -2,7 +2,7 @@
 #define __CHANGESET_ADAPTER_H_
 
 #include <asiodnp3/IOutstation.h>
-#include <asiodnp3/MeasUpdate.h>
+#include <asiodnp3/UpdateBuilder.h>
 
 #include <vcclr.h>
 
@@ -18,7 +18,7 @@ namespace Automatak
 			{
 			public:
 
-				ChangeSetAdapter(asiodnp3::IOutstation& proxy);
+				ChangeSetAdapter();
 
 				~ChangeSetAdapter();
 				
@@ -31,42 +31,13 @@ namespace Automatak
 				virtual void Update(AnalogOutputStatus^ update, System::UInt16 index, EventMode mode);
 				virtual void Update(TimeAndInterval^ update, System::UInt16 index);							
 
-				void Apply();
+				void Apply(asiodnp3::IOutstation& proxy);
 								
 			private:
-
-				asiodnp3::IOutstation* pProxy;
-				asiodnp3::MeasUpdate* pUpdate;
+				
+				asiodnp3::UpdateBuilder* builder;
 			};
-			
-			struct FuncConverter
-			{
-				template <class Native, class Managed>
-				static bool Invoke(asiodnp3::MeasUpdate* pUpdate, System::Func<Managed^, Managed^>^ func, uint16_t index, opendnp3::EventMode mode)
-				{
-					gcroot<System::Func<Managed^, Managed^>^> root(func);
-
-					auto apply = [&](const Native& value)
-					{
-						return Conversions::ConvertMeas(root->Invoke(Conversions::ConvertMeas(value)));
-					};
-
-					return pDatabase->Modify(openpal::Function1<const Native&, Native>::Bind(apply), index, mode);
-				}
-
-				template <class Native, class Managed>
-				static bool Invoke(opendnp3::IDatabase* pDatabase, System::Func<Managed^, Managed^>^ func, uint16_t index)
-				{
-					gcroot<System::Func<Managed^, Managed^>^> root(func);
-
-					auto apply = [&](const Native& value)
-					{
-						return Conversions::ConvertMeas(root->Invoke(Conversions::ConvertMeas(value)));
-					};
-
-					return pDatabase->Modify(openpal::Function1<const Native&, Native>::Bind(apply), index);
-				}
-			};			
+								
 			
 		}
 	}

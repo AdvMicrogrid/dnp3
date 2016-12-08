@@ -19,6 +19,8 @@ ltmain.sh
 *.o
 *.lo
 *.la
+*.s
+*.ii
 Makefile
 config.status
 libtool
@@ -97,6 +99,8 @@ unittest.log
 
 # visual studio generated files
 ipch
+*.db
+*.opendb
 **/**/Debug
 **/**/Release
 java/Debug
@@ -118,6 +122,8 @@ cpp/demos/outstation/Debug
 cpp/demos/outstation/Release
 *vcxproj.user
 cpp/unittest.log
+dotnet/bindings.VC.VC.opendb
+dotnet/bindings.VC.db
 
 #installer
 dotnet/simulator/setup*
@@ -145,5 +151,4 @@ cpp/demos/cover.info
 cpp/demos/cover_html/
 
 # out-of-directory builds
-_build/
-.build/
+build*

@@ -70,7 +70,7 @@ public:
 
 	// --- Implement ICollection<Indexed<CommandResponse>> ----
 
-	virtual uint32_t Count() const override;
+	virtual size_t Count() const override;
 
 	virtual void Foreach(IVisitor<CommandState>& visitor) const override;
 
@@ -105,7 +105,7 @@ bool TypedCommandHeader<T>::Write(HeaderWriter& writer) const
 
 	auto iter = writer.IterateOverCountWithPrefix<openpal::UInt16, T>(QualifierCode::UINT16_CNT_UINT16_INDEX, m_serializer);
 
-	for(auto & rec : m_records)
+	for(auto& rec : m_records)
 	{
 		if (!iter.Write(rec.command, rec.index))
 		{
@@ -192,7 +192,7 @@ void TypedCommandHeader<T>::ApplyOperateResponse(const ICollection<Indexed<T>>& 
 }
 
 template <class T>
-uint32_t TypedCommandHeader<T>::Count() const
+size_t TypedCommandHeader<T>::Count() const
 {
 	return m_records.size();
 }
@@ -200,7 +200,7 @@ uint32_t TypedCommandHeader<T>::Count() const
 template <class T>
 void TypedCommandHeader<T>::Foreach(IVisitor<CommandState>& visitor) const
 {
-	for(auto & rec : m_records)
+	for(auto& rec : m_records)
 	{
 		visitor.OnValue(rec);
 	}

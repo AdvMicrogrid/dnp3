@@ -22,14 +22,14 @@
 #define OPENDNP3_MASTERCONTEXT_H
 
 #include <openpal/executor/IExecutor.h>
-#include <openpal/logging/LogRoot.h>
+#include <openpal/logging/Logger.h>
 #include <openpal/container/Buffer.h>
 #include <openpal/executor/TimerRef.h>
 
 #include "opendnp3/LayerInterfaces.h"
 
 #include "opendnp3/app/AppSeqNum.h"
-#include "opendnp3/app/TimeAndInterval.h"
+#include "opendnp3/app/MeasurementTypes.h"
 
 #include "opendnp3/gen/RestartType.h"
 
@@ -38,12 +38,8 @@
 #include "opendnp3/master/MasterTasks.h"
 #include "opendnp3/master/ITaskLock.h"
 #include "opendnp3/master/IMasterApplication.h"
-#include "opendnp3/master/MasterScan.h"
 #include "opendnp3/master/HeaderBuilder.h"
 #include "opendnp3/master/RestartOperationResult.h"
-
-
-#include <deque>
 
 namespace opendnp3
 {
@@ -57,40 +53,40 @@ protected:
 
 	enum class TaskState
 	{
-	    IDLE,
-	    TASK_READY,
-	    WAIT_FOR_RESPONSE
+		IDLE,
+		TASK_READY,
+		WAIT_FOR_RESPONSE
 	};
 
 public:
 
 	MContext(
-	    openpal::IExecutor& executor,
-	    openpal::Logger logger,
-	    ILowerLayer& lower,
-	    ISOEHandler& SOEHandler,
-	    opendnp3::IMasterApplication& application,
+	    const openpal::Logger& logger,
+	    const std::shared_ptr<openpal::IExecutor>& executor,
+	    const std::shared_ptr<ILowerLayer>& lower,
+	    const std::shared_ptr<ISOEHandler>& SOEHandler,
+	    const std::shared_ptr<IMasterApplication>& application,
 	    const MasterParams& params,
 	    ITaskLock& taskLock
 	);
 
 	openpal::Logger logger;
-	openpal::IExecutor* pExecutor;
-	ILowerLayer* pLower;
+	const std::shared_ptr<openpal::IExecutor> executor;
+	const std::shared_ptr<ILowerLayer> lower;
 
 	// ------- configuration --------
 	MasterParams params;
-	ISOEHandler* pSOEHandler;
+	const std::shared_ptr<ISOEHandler> SOEHandler;
+	const std::shared_ptr<IMasterApplication> application;
 	ITaskLock* pTaskLock;
-	IMasterApplication* pApplication;
 
 
 	// ------- dynamic state ---------
-	bool isOnline;
-	bool isSending;
+	bool isOnline = false;
+	bool isSending = false;
 	AppSeqNum solSeq;
 	AppSeqNum unsolSeq;
-	openpal::ManagedPtr<IMasterTask> pActiveTask;
+	std::shared_ptr<IMasterTask> activeTask;
 	openpal::TimerRef responseTimer;
 	openpal::TimerRef scheduleTimer;
 	openpal::TimerRef taskStartTimeoutTimer;
@@ -116,7 +112,7 @@ public:
 
 	virtual void RecordLastRequest(const openpal::RSlice& apdu) {}
 
-	virtual bool MeetsUserRequirements(const IMasterTask& task)
+	virtual bool MeetsUserRequirements(const std::shared_ptr<IMasterTask>& task)
 	{
 		return true;
 	}
@@ -138,13 +134,13 @@ public:
 
 	/// -----  public methods used to add tasks -----
 
-	MasterScan AddScan(openpal::TimeDuration period, const HeaderBuilderT& builder, TaskConfig config = TaskConfig::Default());
+	std::shared_ptr<IMasterTask> AddScan(openpal::TimeDuration period, const HeaderBuilderT& builder, TaskConfig config = TaskConfig::Default());
 
-	MasterScan AddAllObjectsScan(GroupVariationID gvId, openpal::TimeDuration period, TaskConfig config = TaskConfig::Default());
+	std::shared_ptr<IMasterTask> AddAllObjectsScan(GroupVariationID gvId, openpal::TimeDuration period, TaskConfig config = TaskConfig::Default());
 
-	MasterScan AddClassScan(const ClassField& field, openpal::TimeDuration period, TaskConfig config = TaskConfig::Default());
+	std::shared_ptr<IMasterTask> AddClassScan(const ClassField& field, openpal::TimeDuration period, TaskConfig config = TaskConfig::Default());
 
-	MasterScan AddRangeScan(GroupVariationID gvId, uint16_t start, uint16_t stop, openpal::TimeDuration period, TaskConfig config = TaskConfig::Default());
+	std::shared_ptr<IMasterTask> AddRangeScan(GroupVariationID gvId, uint16_t start, uint16_t stop, openpal::TimeDuration period, TaskConfig config = TaskConfig::Default());
 
 	/// ---- Single shot immediate scans ----
 
@@ -166,7 +162,7 @@ public:
 
 	/// public state manipulation actions
 
-	TaskState BeginNewTask(openpal::ManagedPtr<IMasterTask>& task);
+	TaskState BeginNewTask(const std::shared_ptr<IMasterTask>& task);
 
 	TaskState ResumeActiveTask();
 
@@ -192,7 +188,7 @@ public:
 
 private:
 
-	void ScheduleRecurringPollTask(IMasterTask* pTask);
+	void ScheduleRecurringPollTask(const std::shared_ptr<IMasterTask>& task);
 
 	virtual void OnPendingTask() override
 	{
@@ -205,7 +201,7 @@ private:
 
 protected:
 
-	void ScheduleAdhocTask(IMasterTask* pTask);
+	void ScheduleAdhocTask(const std::shared_ptr<IMasterTask>& task);
 
 	/// state switch lookups
 	TaskState OnStartEvent();

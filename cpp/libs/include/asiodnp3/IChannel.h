@@ -22,22 +22,25 @@
 #define ASIODNP3_ICHANNEL_H
 
 #include <opendnp3/gen/ChannelState.h>
-#include <opendnp3/link/LinkChannelStatistics.h>
+#include <opendnp3/link/LinkStatistics.h>
 
-#include <opendnp3/master/MasterStackConfig.h>
 #include <opendnp3/master/ISOEHandler.h>
 #include <opendnp3/master/IMasterApplication.h>
 
-#include <opendnp3/outstation/OutstationStackConfig.h>
 #include <opendnp3/outstation/ICommandHandler.h>
 #include <opendnp3/outstation/IOutstationApplication.h>
 
 #include <openpal/logging/LogFilters.h>
 #include <openpal/executor/IExecutor.h>
 
+#include "asiopal/IResourceManager.h"
+
 #include "IMaster.h"
 #include "IOutstation.h"
-#include "DestructorHook.h"
+#include "MasterStackConfig.h"
+#include "OutstationStackConfig.h"
+
+#include <memory>
 
 namespace asiodnp3
 {
@@ -45,27 +48,16 @@ namespace asiodnp3
 /**
 * Represents a communication channel upon which masters and outstations can be bound.
 */
-class IChannel : public DestructorHook
+class IChannel : public asiopal::IResource
 {
 public:
 
 	virtual ~IChannel() {}
 
-	/*
-	* Receive callbacks for state transitions on the channels executor
-	* You'll receive one callback immediately with the current state
-	*/
-	virtual void AddStateListener(const std::function<void(opendnp3::ChannelState)>& listener) = 0;
-
 	/**
 	* Synchronously read the channel statistics
 	*/
-	virtual opendnp3::LinkChannelStatistics GetChannelStatistics() = 0;
-
-	/**
-	* synchronously shutdown the channel
-	*/
-	virtual void Shutdown() = 0;
+	virtual opendnp3::LinkStatistics GetStatistics() = 0;
 
 	/**
 	*  @return The current logger settings for this channel
@@ -85,12 +77,12 @@ public:
 	* @param application The master application bound to the master session
 	* @param config Configuration object that controls how the master behaves
 	*
-	* @return interface representing the running master
+	* @return shared_ptr to the running master
 	*/
-	virtual IMaster* AddMaster(		char const* id,
-	                                opendnp3::ISOEHandler& SOEHandler,
-	                                opendnp3::IMasterApplication& application,
-	                                const opendnp3::MasterStackConfig& config) = 0;
+	virtual std::shared_ptr<IMaster>  AddMaster(const std::string& id,
+	        std::shared_ptr<opendnp3::ISOEHandler> SOEHandler,
+	        std::shared_ptr<opendnp3::IMasterApplication> application,
+	        const MasterStackConfig& config) = 0;
 
 	/**
 	* Add an outstation to the channel
@@ -99,12 +91,12 @@ public:
 	* @param commandHandler Callback object for handling command requests
 	* @param application Callback object for user code
 	* @param config Configuration object that controls how the outstation behaves
-	* @return interface representing the running outstations
+	* @return shared_ptr to the running outstation
 	*/
-	virtual IOutstation* AddOutstation( char const* id,
-	                                    opendnp3::ICommandHandler& commandHandler,
-	                                    opendnp3::IOutstationApplication& application,
-	                                    const opendnp3::OutstationStackConfig& config) = 0;
+	virtual std::shared_ptr<IOutstation>  AddOutstation( const std::string& id,
+	        std::shared_ptr<opendnp3::ICommandHandler> commandHandler,
+	        std::shared_ptr<opendnp3::IOutstationApplication> application,
+	        const OutstationStackConfig& config) = 0;
 
 };
 

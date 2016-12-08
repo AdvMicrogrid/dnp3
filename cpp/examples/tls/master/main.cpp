@@ -20,6 +20,7 @@
  */
 #include <asiodnp3/DNP3Manager.h>
 #include <asiodnp3/PrintingSOEHandler.h>
+#include <asiodnp3/PrintingChannelListener.h>
 #include <asiodnp3/ConsoleLogger.h>
 #include <asiodnp3/DefaultMasterApplication.h>
 #include <asiodnp3/PrintingCommandCallback.h>
@@ -60,29 +61,23 @@ int main(int argc, char* argv[])
 	std::error_code ec;
 
 	// Connect via a TCPClient socket to a outstation
-	auto pChannel = manager.AddTLSClient(
-	                    "tls-client",
-	                    FILTERS,
-	                    ChannelRetry::Default(),
-	                    "127.0.0.1",
-	                    "0.0.0.0",
-	                    20001,
-	                    TLSConfig(peerCertificate, privateKey, privateKey),
-	                    ec
-	                );
+	auto channel = manager.AddTLSClient(
+	                   "tls-client",
+	                   FILTERS,
+	                   ChannelRetry::Default(),
+	                   "127.0.0.1",
+	                   "0.0.0.0",
+	                   20001,
+	                   TLSConfig(peerCertificate, privateKey, privateKey),
+	                   PrintingChannelListener::Create(),
+	                   ec
+	               );
 
 	if (ec)
 	{
 		std::cout << "Unable to create tls client: " << ec.message() << std::endl;
 		return ec.value();
 	}
-
-	// Optionally, you can bind listeners to the channel to get state change notifications
-	// This listener just prints the changes to the console
-	pChannel->AddStateListener([](ChannelState state)
-	{
-		std::cout << "channel state: " << ChannelStateToString(state) << std::endl;
-	});
 
 	// The master config object for a master. The default are
 	// useable, but understanding the options are important.
@@ -101,22 +96,22 @@ int main(int argc, char* argv[])
 	// Create a new master on a previously declared port, with a
 	// name, log level, command acceptor, and config info. This
 	// returns a thread-safe interface used for sending commands.
-	auto pMaster = pChannel->AddMaster(
-	                   "master",										// id for logging
-	                   PrintingSOEHandler::Instance(),					// callback for data processing
-	                   asiodnp3::DefaultMasterApplication::Instance(),	// master application instance
-	                   stackConfig										// stack configuration
-	               );
+	auto master = channel->AddMaster(
+	                  "master",										// id for logging
+	                  PrintingSOEHandler::Create(),					// callback for data processing
+	                  asiodnp3::DefaultMasterApplication::Create(),	// master application instance
+	                  stackConfig										// stack configuration
+	              );
 
 
 	// do an integrity poll (Class 3/2/1/0) once per minute
-	auto integrityScan = pMaster->AddClassScan(ClassField::AllClasses(), TimeDuration::Minutes(1));
+	auto integrityScan = master->AddClassScan(ClassField::AllClasses(), TimeDuration::Minutes(1));
 
 	// do a Class 1 exception poll every 5 seconds
-	auto exceptionScan = pMaster->AddClassScan(ClassField(ClassField::CLASS_1), TimeDuration::Seconds(2));
+	auto exceptionScan = master->AddClassScan(ClassField(ClassField::CLASS_1), TimeDuration::Seconds(2));
 
 	// Enable the master. This will start communications.
-	pMaster->Enable();
+	master->Enable();
 
 	do
 	{
@@ -134,12 +129,12 @@ int main(int argc, char* argv[])
 		switch(cmd)
 		{
 		case('a') :
-			pMaster->ScanRange(GroupVariationID(1, 2), 0, 3);
+			master->ScanRange(GroupVariationID(1, 2), 0, 3);
 			break;
 		case('d') :
-			pMaster->PerformFunction("disable unsol", FunctionCode::DISABLE_UNSOLICITED,
+			master->PerformFunction("disable unsol", FunctionCode::DISABLE_UNSOLICITED,
 			{ Header::AllObjects(60, 2), Header::AllObjects(60, 3), Header::AllObjects(60, 4) }
-			                        );
+			                       );
 			break;
 		case('r') :
 			{
@@ -154,22 +149,22 @@ int main(int argc, char* argv[])
 						std::cout << "Failure: " << TaskCompletionToString(result.summary) << std::endl;
 					}
 				};
-				pMaster->Restart(RestartType::COLD, print);
+				master->Restart(RestartType::COLD, print);
 				break;
 			}
 		case('x'):
 			// C++ destructor on DNP3Manager cleans everything up for you
 			return 0;
 		case('i'):
-			integrityScan.Demand();
+			integrityScan->Demand();
 			break;
 		case('e'):
-			exceptionScan.Demand();
+			exceptionScan->Demand();
 			break;
 		case('c'):
 			{
 				ControlRelayOutputBlock crob(ControlCode::LATCH_ON);
-				pMaster->SelectAndOperate(crob, 0, PrintingCommandCallback::Get());
+				master->SelectAndOperate(crob, 0, PrintingCommandCallback::Get());
 				break;
 			}
 		default:

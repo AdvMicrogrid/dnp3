@@ -23,7 +23,7 @@ namespace Automatak.DNP3.Interface
   /// <summary>
   /// Enumeration for reset/unreset states of a link layer
   /// </summary>
-  public enum LinkStatus : int
+  public enum LinkStatus : byte
   {
     /// <summary>
     /// DOWN

@@ -20,8 +20,6 @@
  */
 #include "DNP3Channel.h"
 
-#include <asiopal/PhysicalLayerBase.h>
-
 #include <openpal/logging/LogMacros.h>
 #include <opendnp3/LogLevels.h>
 
@@ -29,168 +27,124 @@
 #include "OutstationStack.h"
 
 using namespace openpal;
+using namespace asiopal;
 using namespace opendnp3;
 
 namespace asiodnp3
 {
 
 DNP3Channel::DNP3Channel(
-    std::unique_ptr<LogRoot> root_,
-    const ChannelRetry& retry,
-    std::unique_ptr<asiopal::PhysicalLayerASIO> phys_) :
+    const Logger& logger,
+    const std::shared_ptr<asiopal::Executor>& executor,
+    const std::shared_ptr<IOHandler>& iohandler,
+    const std::shared_ptr<asiopal::IResourceManager>& manager) :
 
-	phys(std::move(phys_)),
-	root(std::move(root_)),
-	pShutdownHandler(nullptr),
-	channelState(ChannelState::CLOSED),
-	router(root->logger, phys->executor, phys.get(), retry, this, &statistics),
-	stacks(router, phys->executor)
+	logger(logger),
+	executor(executor),
+	iohandler(iohandler),
+	manager(manager),
+	resources(ResourceManager::Create())
 {
-	phys->SetChannelStatistics(&statistics);
 
-	auto onShutdown = [this]()
-	{
-		this->CheckForFinalShutdown();
-	};
-	router.SetShutdownHandler(Action0::Bind(onShutdown));
 }
 
-void DNP3Channel::OnStateChange(ChannelState state)
+DNP3Channel::~DNP3Channel()
 {
-	channelState = state;
-	for (auto & cb : callbacks)
-	{
-		cb(state);
-	}
-	this->CheckForFinalShutdown();
+	this->ShutdownImpl();
 }
 
-void DNP3Channel::AddStateListener(const std::function<void(opendnp3::ChannelState)>& listener)
-{
-	auto lambda = [this, listener]()
-	{
-		this->callbacks.push_back(listener);
-		listener(channelState);
-	};
-	phys->executor.strand.post(lambda);
-}
-
-// comes from the outside, so we need to synchronize
+// comes from the outside, so we need to post
 void DNP3Channel::Shutdown()
 {
-	stacks.ShutdownAll(); // shutdown all the stacks
-
-	// shutdown router
-	asiopal::Synchronized<bool> blocking;
-	auto initiate = [this, &blocking]()
+	auto shutdown = [self = shared_from_this()]()
 	{
-		this->InitiateShutdown(blocking);
+		self->ShutdownImpl();
 	};
-	phys->executor.strand.post(initiate);
-	blocking.WaitForValue();
 
-	// With the router shutdown, wait for any remaining timers
-	phys->executor.WaitForShutdown();
-
-	shutdownHandler.Apply();
+	this->executor->BlockUntilAndFlush(shutdown);
 }
 
-LinkChannelStatistics DNP3Channel::GetChannelStatistics()
+void DNP3Channel::ShutdownImpl()
+{
+	if (!this->resources) return;
+
+	// shutdown the IO handler
+	this->iohandler->Shutdown();
+	this->iohandler.reset();
+
+	// shutdown any remaining stacks
+	this->resources->Shutdown();
+	this->resources.reset();
+
+	// posting ensures that we run this after
+	// and callbacks created by calls above
+	auto detach = [self = shared_from_this()]
+	{
+		self->manager->Detach(self);
+		self->manager.reset();
+	};
+
+	this->executor->strand.post(detach);
+}
+
+LinkStatistics DNP3Channel::GetStatistics()
 {
 	auto get = [this]()
 	{
-		return statistics;
+		return this->iohandler->Statistics();
 	};
-	return phys->executor.ReturnBlockFor<LinkChannelStatistics>(get);
+	return this->executor->ReturnFrom<LinkStatistics>(get);
 }
 
-void DNP3Channel::InitiateShutdown(asiopal::Synchronized<bool>& handler)
-{
-	this->pShutdownHandler = &handler;
-	router.Shutdown();
-	this->CheckForFinalShutdown();
-}
-
-void DNP3Channel::CheckForFinalShutdown()
-{
-	if (pShutdownHandler && (router.GetState() == ChannelState::SHUTDOWN))
-	{
-		pShutdownHandler->SetValue(true);
-	}
-}
-
-openpal::LogFilters DNP3Channel::GetLogFilters() const
+LogFilters DNP3Channel::GetLogFilters() const
 {
 	auto get = [this]()
 	{
-		return root->GetFilters();
+		return this->logger.GetFilters();
 	};
-	return phys->executor.ReturnBlockFor<LogFilters>(get);
+	return this->executor->ReturnFrom<LogFilters>(get);
 }
 
-void DNP3Channel::SetLogFilters(const openpal::LogFilters& filters)
+void DNP3Channel::SetLogFilters(const LogFilters& filters)
 {
-	auto set = [this, filters]()
+	auto set = [self = this->shared_from_this(), filters]()
 	{
-		root->SetFilters(filters);
+		self->logger.SetFilters(filters);
 	};
-	phys->executor.BlockFor(set);
+	this->executor->strand.post(set);
 }
 
-IMaster* DNP3Channel::AddMaster(char const* id, ISOEHandler& SOEHandler, IMasterApplication& application, const MasterStackConfig& config)
+std::shared_ptr<IMaster> DNP3Channel::AddMaster(const std::string& id, std::shared_ptr<ISOEHandler> SOEHandler, std::shared_ptr<IMasterApplication> application, const MasterStackConfig& config)
 {
-	auto add = [&]() -> IMaster*
-	{
-		auto factory = [&]() -> MasterStack*
-		{
-			auto root = std::unique_ptr<openpal::LogRoot>(new openpal::LogRoot(*this->root.get(), id));
-			return new MasterStack(std::move(root), this->phys->executor, SOEHandler, application, config, stacks, router.GetTaskLock());
-		};
+	auto stack = MasterStack::Create(this->logger.Detach(id), this->executor, SOEHandler, application, this->iohandler, this->resources, config, this->iohandler->TaskLock());
 
-		return this->AddStack<MasterStack>(config.link, factory);
-	};
+	return this->AddStack(config.link, stack);
 
-	return phys->executor.ReturnBlockFor<IMaster*>(add);
 }
 
-IOutstation* DNP3Channel::AddOutstation(char const* id, ICommandHandler& commandHandler, IOutstationApplication& application, const OutstationStackConfig& config)
+std::shared_ptr<IOutstation> DNP3Channel::AddOutstation(const std::string& id, std::shared_ptr<ICommandHandler> commandHandler, std::shared_ptr<IOutstationApplication> application, const OutstationStackConfig& config)
 {
-	auto add = [this, id, &commandHandler, &application, config]() -> IOutstation*
-	{
-		auto factory = [&]()
-		{
-			auto root = std::unique_ptr<openpal::LogRoot>(new openpal::LogRoot(*this->root.get(), id));
-			return new OutstationStack(std::move(root), this->phys->executor, commandHandler, application, config, stacks);
-		};
+	auto stack = OutstationStack::Create(this->logger.Detach(id), this->executor, commandHandler, application, this->iohandler, this->resources, config);
 
-		return this->AddStack<OutstationStack>(config.link, factory);
-	};
-
-	return phys->executor.ReturnBlockFor<IOutstation*>(add);
-}
-
-void DNP3Channel::SetShutdownHandler(const openpal::Action0& action)
-{
-	shutdownHandler = action;
+	return this->AddStack(config.link, stack);
 }
 
 template <class T>
-T* DNP3Channel::AddStack(const opendnp3::LinkConfig& link, const std::function<T* ()>& factory)
+std::shared_ptr<T> DNP3Channel::AddStack(const LinkConfig& link, const std::shared_ptr<T>& stack)
 {
-	Route route(link.RemoteAddr, link.LocalAddr);
-	if (router.IsRouteInUse(route))
+
+	auto create = [stack, route = Route(link.RemoteAddr, link.LocalAddr), self = this->shared_from_this()]()
 	{
-		FORMAT_LOG_BLOCK(root->logger, flags::ERR, "Route already in use: %i -> %i", route.source, route.destination);
-		return nullptr;
-	}
-	else
-	{
-		auto pStack = factory();
-		stacks.Add(pStack);
-		pStack->SetLinkRouter(router);
-		router.AddContext(pStack->GetLinkContext(), route);
-		return pStack;
-	}
+
+		auto add = [stack, route, self]() -> bool
+		{
+			return self->iohandler->AddContext(stack, route);
+		};
+
+		return self->executor->ReturnFrom<bool>(add) ? stack : nullptr;
+	};
+
+	return this->resources->Bind<T>(create);
 }
 
 }

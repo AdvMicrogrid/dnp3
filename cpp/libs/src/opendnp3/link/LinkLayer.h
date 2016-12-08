@@ -32,7 +32,7 @@ class LinkLayer final : public ILinkLayer, public ILinkSession
 
 public:
 
-	LinkLayer(openpal::Logger logger, openpal::IExecutor&, IUpperLayer& upper, opendnp3::ILinkListener&, const LinkConfig&);
+	LinkLayer(const openpal::Logger& logger, const std::shared_ptr<openpal::IExecutor>&, const std::shared_ptr<IUpperLayer>& upper, const std::shared_ptr<opendnp3::ILinkListener>&, const LinkConfig&);
 
 	void SetRouter(ILinkTx&);
 
@@ -45,7 +45,9 @@ public:
 
 	// ---- Events from above: ILinkLayer ----
 
-	virtual void Send(ITransportSegment& segments) override;
+	virtual bool Send(ITransportSegment& segments) override;
+
+	const StackStatistics::Link& GetStatistics() const;
 
 private:
 

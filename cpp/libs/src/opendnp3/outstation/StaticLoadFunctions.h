@@ -23,51 +23,58 @@
 
 #include "opendnp3/app/Range.h"
 #include "opendnp3/app/HeaderWriter.h"
-#include "opendnp3/app/TimeAndInterval.h"
-#include "opendnp3/app/MeasurementTypes.h"
+#include "opendnp3/app/MeasurementTypeSpecs.h"
 #include "opendnp3/app/SecurityStat.h"
 #include "opendnp3/outstation/Cell.h"
+
+#include "opendnp3/gen/StaticBinaryVariation.h"
+#include "opendnp3/gen/StaticDoubleBinaryVariation.h"
+#include "opendnp3/gen/StaticCounterVariation.h"
+#include "opendnp3/gen/StaticFrozenCounterVariation.h"
+#include "opendnp3/gen/StaticAnalogVariation.h"
+#include "opendnp3/gen/StaticAnalogOutputStatusVariation.h"
+#include "opendnp3/gen/StaticBinaryOutputStatusVariation.h"
 
 #include <openpal/container/ArrayView.h>
 
 namespace opendnp3
 {
 
-template <class T>
+template <class Spec>
 struct StaticWriter
 {
-	typedef bool (*Function)(openpal::ArrayView<Cell<T>, uint16_t>& view, HeaderWriter& writer, Range& range);
+	typedef bool (*Function)(openpal::ArrayView<Cell<Spec>, uint16_t>& view, HeaderWriter& writer, Range& range);
 };
 
-StaticWriter<Binary>::Function GetStaticWriter(StaticBinaryVariation variation);
+StaticWriter<BinarySpec>::Function GetStaticWriter(StaticBinaryVariation variation);
 
-StaticWriter<DoubleBitBinary>::Function GetStaticWriter(StaticDoubleBinaryVariation variation);
+StaticWriter<DoubleBitBinarySpec>::Function GetStaticWriter(StaticDoubleBinaryVariation variation);
 
-StaticWriter<Counter>::Function GetStaticWriter(StaticCounterVariation variation);
+StaticWriter<CounterSpec>::Function GetStaticWriter(StaticCounterVariation variation);
 
-StaticWriter<FrozenCounter>::Function GetStaticWriter(StaticFrozenCounterVariation variation);
+StaticWriter<FrozenCounterSpec>::Function GetStaticWriter(StaticFrozenCounterVariation variation);
 
-StaticWriter<Analog>::Function GetStaticWriter(StaticAnalogVariation variation);
+StaticWriter<AnalogSpec>::Function GetStaticWriter(StaticAnalogVariation variation);
 
-StaticWriter<AnalogOutputStatus>::Function GetStaticWriter(StaticAnalogOutputStatusVariation variation);
+StaticWriter<AnalogOutputStatusSpec>::Function GetStaticWriter(StaticAnalogOutputStatusVariation variation);
 
-StaticWriter<BinaryOutputStatus>::Function GetStaticWriter(StaticBinaryOutputStatusVariation variation);
+StaticWriter<BinaryOutputStatusSpec>::Function GetStaticWriter(StaticBinaryOutputStatusVariation variation);
 
-StaticWriter<TimeAndInterval>::Function GetStaticWriter(StaticTimeAndIntervalVariation variation);
+StaticWriter<TimeAndIntervalSpec>::Function GetStaticWriter(StaticTimeAndIntervalVariation variation);
 
-StaticWriter<SecurityStat>::Function GetStaticWriter(StaticSecurityStatVariation variation);
+StaticWriter<SecurityStatSpec>::Function GetStaticWriter(StaticSecurityStatVariation variation);
 
-template <class Target, class IndexType>
-bool LoadWithRangeIterator(openpal::ArrayView<Cell<Target>, uint16_t>& view, RangeWriteIterator<IndexType, Target>& iterator, Range& range)
+template <class Spec, class IndexType >
+bool LoadWithRangeIterator(openpal::ArrayView<Cell<Spec>, uint16_t>& view, RangeWriteIterator<IndexType, typename Spec::meas_t>& iterator, Range& range)
 {
-	const Cell<Target>& start = view[range.start];
-	uint16_t nextIndex = start.vIndex;
+	const Cell<Spec>& start = view[range.start];
+	uint16_t nextIndex = start.config.vIndex;
 
 	while (
 	    range.IsValid() &&
 	    view[range.start].selection.selected &&
 	    (view[range.start].selection.variation == start.selection.variation) &&
-	    (view[range.start].vIndex == nextIndex)
+	    (view[range.start].config.vIndex == nextIndex)
 	)
 	{
 		if (iterator.Write(view[range.start].selection.value))
@@ -86,18 +93,18 @@ bool LoadWithRangeIterator(openpal::ArrayView<Cell<Target>, uint16_t>& view, Ran
 	return true;
 }
 
-template <class Target, class IndexType>
-bool LoadWithBitfieldIterator(openpal::ArrayView<Cell<Target>, uint16_t>& view, BitfieldRangeWriteIterator<IndexType>& iterator, Range& range)
+template <class Spec, class IndexType>
+bool LoadWithBitfieldIterator(openpal::ArrayView<Cell<Spec>, uint16_t>& view, BitfieldRangeWriteIterator<IndexType>& iterator, Range& range)
 {
-	const Cell<Target>& start = view[range.start];
+	const Cell<Spec>& start = view[range.start];
 
-	uint16_t nextIndex = start.vIndex;
+	uint16_t nextIndex = start.config.vIndex;
 
 	while (
 	    range.IsValid() &&
 	    view[range.start].selection.selected &&
 	    (view[range.start].selection.variation == start.selection.variation) &&
-	    (view[range.start].vIndex == nextIndex)
+	    (view[range.start].config.vIndex == nextIndex)
 	)
 	{
 		if (iterator.Write(view[range.start].selection.value.value))
@@ -116,41 +123,42 @@ bool LoadWithBitfieldIterator(openpal::ArrayView<Cell<Target>, uint16_t>& view, 
 	return true;
 }
 
-template <class T, class GV>
-bool WriteSingleBitfield(openpal::ArrayView<Cell<T>, uint16_t>& view, HeaderWriter& writer, Range& range)
+template <class Spec, class GV>
+bool WriteSingleBitfield(openpal::ArrayView<Cell<Spec>, uint16_t>& view, HeaderWriter& writer, Range& range)
 {
-	auto start = view[range.start].vIndex;
-	auto stop = view[range.stop].vIndex;
+	auto start = view[range.start].config.vIndex;
+	auto stop = view[range.stop].config.vIndex;
 	auto mapped = Range::From(start, stop);
 
 	if (mapped.IsOneByte())
 	{
 		auto iter = writer.IterateOverSingleBitfield<openpal::UInt8>(GV::ID(), QualifierCode::UINT8_START_STOP, static_cast<uint8_t>(mapped.start));
-		return LoadWithBitfieldIterator<T, openpal::UInt8>(view, iter, range);
+		return LoadWithBitfieldIterator<Spec, openpal::UInt8>(view, iter, range);
 	}
 	else
 	{
 		auto iter = writer.IterateOverSingleBitfield<openpal::UInt16>(GV::ID(), QualifierCode::UINT16_START_STOP, mapped.start);
-		return LoadWithBitfieldIterator<T, openpal::UInt16>(view, iter, range);
+		return LoadWithBitfieldIterator<Spec, openpal::UInt16>(view, iter, range);
 	}
 }
 
-template <class Serializer>
-bool WriteWithSerializer(openpal::ArrayView<Cell<typename Serializer::Target>, uint16_t>& view, HeaderWriter& writer, Range& range)
+
+template <class Spec, class Serializer>
+bool WriteWithSerializer(openpal::ArrayView<Cell<Spec>, uint16_t>& view, HeaderWriter& writer, Range& range)
 {
-	auto start = view[range.start].vIndex;
-	auto stop = view[range.stop].vIndex;
+	auto start = view[range.start].config.vIndex;
+	auto stop = view[range.stop].config.vIndex;
 	auto mapped = Range::From(start, stop);
 
 	if (mapped.IsOneByte())
 	{
 		auto iter = writer.IterateOverRange<openpal::UInt8, typename Serializer::Target>(QualifierCode::UINT8_START_STOP, Serializer::Inst(), static_cast<uint8_t>(mapped.start));
-		return LoadWithRangeIterator<typename Serializer::Target, openpal::UInt8>(view, iter, range);
+		return LoadWithRangeIterator<Spec, openpal::UInt8>(view, iter, range);
 	}
 	else
 	{
 		auto iter = writer.IterateOverRange<openpal::UInt16, typename Serializer::Target>(QualifierCode::UINT16_START_STOP, Serializer::Inst(), mapped.start);
-		return LoadWithRangeIterator<typename Serializer::Target, openpal::UInt16>(view, iter, range);
+		return LoadWithRangeIterator<Spec, openpal::UInt16>(view, iter, range);
 	}
 }
 

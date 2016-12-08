@@ -45,7 +45,7 @@ openpal::TimeDuration DefaultListenCallbacks::GetFirstFrameTimeout()
 
 void DefaultListenCallbacks::OnFirstFrame(uint64_t sessionid, const opendnp3::LinkHeaderFields& header, ISessionAcceptor& acceptor)
 {
-	opendnp3::MasterStackConfig config;
+	MasterStackConfig config;
 
 	// full implementations will look up config information for the SRC address
 
@@ -59,10 +59,14 @@ void DefaultListenCallbacks::OnFirstFrame(uint64_t sessionid, const opendnp3::Li
 	auto master = acceptor.AcceptSession(SessionIdToString(sessionid), soe, app, config);
 }
 
-void DefaultListenCallbacks::OnConnectionClose(uint64_t sessionid, std::shared_ptr<IMasterSession> session)
+void DefaultListenCallbacks::OnConnectionClose(uint64_t sessionid, const std::shared_ptr<IMasterSession>& session)
 {
 	// full implementations would drop any references they're holding to this session
 	// shared_ptr can be used with == operator also
+}
+
+void DefaultListenCallbacks::OnCertificateError(uint64_t sessionid, const X509Info& info, int error)
+{
 }
 
 std::string DefaultListenCallbacks::SessionIdToString(uint64_t id)

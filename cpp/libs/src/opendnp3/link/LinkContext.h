@@ -21,7 +21,7 @@
 #ifndef OPENDNP3_LINK_CONTEXT_H
 #define OPENDNP3_LINK_CONTEXT_H
 
-#include <openpal/logging/LogRoot.h>
+#include <openpal/logging/Logger.h>
 #include <openpal/executor/IExecutor.h>
 #include <openpal/executor/TimerRef.h>
 #include <openpal/container/Settable.h>
@@ -33,19 +33,20 @@
 #include "opendnp3/link/LinkLayerConstants.h"
 #include "opendnp3/link/LinkConfig.h"
 #include "opendnp3/link/ILinkListener.h"
+#include "opendnp3/link/ILinkTx.h"
+#include "opendnp3/StackStatistics.h"
 
 namespace opendnp3
 {
 
-class ILinkTx;
 class PriStateBase;
 class SecStateBase;
 
 enum class LinkTransmitMode : uint8_t
 {
-    Idle,
-    Primary,
-    Secondary
+	Idle,
+	Primary,
+	Secondary
 };
 
 //	@section desc Implements the contextual state of DNP3 Data Link Layer
@@ -55,7 +56,7 @@ class LinkContext
 
 public:
 
-	LinkContext(openpal::Logger logger, openpal::IExecutor&, IUpperLayer& upper, opendnp3::ILinkListener&, ILinkSession& session, const LinkConfig&);
+	LinkContext(const openpal::Logger& logger, const std::shared_ptr<openpal::IExecutor>&, const std::shared_ptr<IUpperLayer>&, const std::shared_ptr<opendnp3::ILinkListener>&, ILinkSession& session, const LinkConfig&);
 
 
 	/// ---- helpers for dealing with the FCB bits ----
@@ -124,7 +125,9 @@ public:
 	ITransportSegment* pSegments;
 	LinkTransmitMode txMode;
 	uint32_t numRetryRemaining;
-	openpal::IExecutor* pExecutor;
+
+	const std::shared_ptr<openpal::IExecutor> executor;
+
 	openpal::TimerRef rspTimeoutTimer;
 	openpal::TimerRef keepAliveTimer;
 	bool nextReadFCB;
@@ -133,12 +136,17 @@ public:
 	bool isRemoteReset;
 	bool keepAliveTimeout;
 	openpal::MonotonicTimestamp lastMessageTimestamp;
-	ILinkTx* pRouter;
+	StackStatistics::Link statistics;
+
+	ILinkTx* linktx = nullptr;
+
 	PriStateBase* pPriState;
 	SecStateBase* pSecState;
-	ILinkListener* pListener;
+
+	const std::shared_ptr<opendnp3::ILinkListener> listener;
+	const std::shared_ptr<IUpperLayer> upper;
+
 	ILinkSession* pSession;
-	IUpperLayer* pUpperLayer;
 };
 
 }

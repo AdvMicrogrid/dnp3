@@ -49,26 +49,26 @@ namespace opendnp3
 
 OContext::OContext(
     const OutstationConfig& config,
-    const DatabaseTemplate& dbTemplate,
-    openpal::Logger logger_,
-    openpal::IExecutor& executor,
-    ILowerLayer& lower,
-    ICommandHandler& commandHandler,
-    IOutstationApplication& application) :
+    const DatabaseSizes& dbSizes,
+    const openpal::Logger& logger,
+    const std::shared_ptr<openpal::IExecutor>& executor,
+    const std::shared_ptr<ILowerLayer>& lower,
+    const std::shared_ptr<ICommandHandler>& commandHandler,
+    const std::shared_ptr<IOutstationApplication>& application) :
 
-	logger(logger_),
-	pExecutor(&executor),
-	pLower(&lower),
-	pCommandHandler(&commandHandler),
-	pApplication(&application),
+	logger(logger),
+	executor(executor),
+	lower(lower),
+	commandHandler(commandHandler),
+	application(application),
 	eventBuffer(config.eventBufferConfig),
-	database(dbTemplate, eventBuffer, config.params.indexMode, config.params.typesAllowedInClass0),
+	database(dbSizes, eventBuffer, config.params.indexMode, config.params.typesAllowedInClass0),
 	rspContext(database.GetResponseLoader(), eventBuffer),
 	params(config.params),
 	isOnline(false),
 	isTransmitting(false),
 	staticIIN(IINBit::DEVICE_RESTART),
-	confirmTimer(executor),
+	confirmTimer(*executor),
 	deferred(config.params.maxRxFragSize),
 	sol(config.params.maxTxFragSize),
 	unsol(config.params.maxTxFragSize)
@@ -96,6 +96,8 @@ bool OContext::OnLowerLayerDown()
 		SIMPLE_LOG_BLOCK(logger, flags::ERR, "already offline");
 		return false;
 	}
+
+	this->state = &StateIdle::Inst();
 
 	isOnline = false;
 	isTransmitting = false;
@@ -131,14 +133,12 @@ bool OContext::OnReceive(const openpal::RSlice& fragment)
 		return false;
 	}
 
-
-	this->Increment(SecurityStatIndex::TOTAL_MESSAGES_RX);
 	this->ParseHeader(fragment);
 	this->CheckForTaskStart();
 	return true;
 }
 
-OutstationSolicitedStateBase* OContext::OnReceiveSolRequest(const APDUHeader& header, const openpal::RSlice& objects)
+OutstationState& OContext::OnReceiveSolRequest(const APDUHeader& header, const openpal::RSlice& objects)
 {
 	// analyze this request to see how it compares to the last request
 	if (this->history.HasLastRequest())
@@ -149,12 +149,11 @@ OutstationSolicitedStateBase* OContext::OnReceiveSolRequest(const APDUHeader& he
 			{
 				if (header.function == FunctionCode::READ)
 				{
-					SIMPLE_LOG_BLOCK(this->logger, flags::WARN, "Ignoring repeat read request");
-					return this->sol.pState;
+					return this->state->OnRepeatReadRequest(*this, header, objects);
 				}
 				else
 				{
-					return this->sol.pState->OnRepeatNonReadRequest(*this, header, objects);
+					return this->state->OnRepeatNonReadRequest(*this, header, objects);
 				}
 			}
 			else // new operation with same SEQ
@@ -173,24 +172,18 @@ OutstationSolicitedStateBase* OContext::OnReceiveSolRequest(const APDUHeader& he
 	}
 }
 
-OutstationSolicitedStateBase* OContext::ProcessNewRequest(const APDUHeader& header, const openpal::RSlice& objects)
+OutstationState& OContext::ProcessNewRequest(const APDUHeader& header, const openpal::RSlice& objects)
 {
 	this->sol.seq.num = header.control.SEQ;
 
 	if (header.function == FunctionCode::READ)
 	{
-		return this->sol.pState->OnNewReadRequest(*this, header, objects);
+		return this->state->OnNewReadRequest(*this, header, objects);
 	}
 	else
 	{
-		return this->sol.pState->OnNewNonReadRequest(*this, header, objects);
+		return this->state->OnNewNonReadRequest(*this, header, objects);
 	}
-}
-
-void OContext::ReceiveParsedHeader(const openpal::RSlice& apdu, const APDUHeader& header, const openpal::RSlice& objects)
-{
-	// this look strange, but this method is overridable for SA
-	this->ProcessAPDU(apdu, header, objects);
 }
 
 void OContext::ProcessAPDU(const openpal::RSlice& apdu, const APDUHeader& header, const openpal::RSlice& objects)
@@ -230,31 +223,24 @@ void OContext::ProcessRequest(const APDUHeader& header, const openpal::RSlice& o
 	}
 	else
 	{
-		this->sol.pState = this->OnReceiveSolRequest(header, objects);
+		this->state = &this->OnReceiveSolRequest(header, objects);
 	}
 }
 
 void OContext::ProcessConfirm(const APDUHeader& header)
 {
-	if (header.control.UNS)
-	{
-		this->unsol.pState = this->unsol.pState->OnConfirm(*this, header);
-	}
-	else
-	{
-		this->sol.pState = this->sol.pState->OnConfirm(*this, header);
-	}
+	this->state = &this->state->OnConfirm(*this, header);
 }
 
-void OContext::BeginResponseTx(const RSlice& response)
+void OContext::BeginResponseTx(const AppControlField& control, const RSlice& response)
 {
-	this->sol.tx.Record(response);
+	this->sol.tx.Record(control, response);
 	this->BeginTx(response);
 }
 
-void OContext::BeginUnsolTx(const RSlice& response)
+void OContext::BeginUnsolTx(const AppControlField& control, const RSlice& response)
 {
-	this->unsol.tx.Record(response);
+	this->unsol.tx.Record(control, response);
 	this->unsol.seq.confirmNum = this->unsol.seq.num;
 	this->unsol.seq.num.Increment();
 	this->BeginTx(response);
@@ -264,8 +250,7 @@ void OContext::BeginTx(const openpal::RSlice& response)
 {
 	logging::ParseAndLogResponseTx(this->logger, response);
 	this->isTransmitting = true;
-	this->pLower->BeginTransmit(response);
-	this->Increment(SecurityStatIndex::TOTAL_MESSAGES_TX);
+	this->lower->BeginTransmit(response);
 }
 
 void OContext::CheckForDeferredRequest()
@@ -291,7 +276,7 @@ bool OContext::ProcessDeferredRequest(APDUHeader header, openpal::RSlice objects
 	{
 		if (header.function == FunctionCode::READ)
 		{
-			if (this->unsol.IsIdle())
+			if (this->state->IsIdle())
 			{
 				this->ProcessRequest(header, objects);
 				return true;
@@ -311,7 +296,7 @@ bool OContext::ProcessDeferredRequest(APDUHeader header, openpal::RSlice objects
 
 void OContext::CheckForUnsolicited()
 {
-	if (this->CanTransmit() && this->unsol.IsIdle() && this->params.allowUnsolicited)
+	if (this->CanTransmit() && this->state->IsIdle() && this->params.allowUnsolicited)
 	{
 		if (this->unsol.completedNull)
 		{
@@ -327,9 +312,9 @@ void OContext::CheckForUnsolicited()
 				this->eventBuffer.Load(writer);
 
 				build::NullUnsolicited(response, this->unsol.seq.num, this->GetResponseIIN());
-				this->StartUnsolicitedConfirmTimer();
-				this->unsol.pState = &OutstationUnsolicitedStateConfirmWait::Inst();
-				this->BeginUnsolTx(response.ToRSlice());
+				this->RestartConfirmTimer();
+				this->state = &StateUnsolicitedConfirmWait::Inst();
+				this->BeginUnsolTx(response.GetControl(), response.ToRSlice());
 			}
 		}
 		else
@@ -337,34 +322,25 @@ void OContext::CheckForUnsolicited()
 			// send a NULL unsolcited message
 			auto response = this->unsol.tx.Start();
 			build::NullUnsolicited(response, this->unsol.seq.num, this->GetResponseIIN());
-			this->StartUnsolicitedConfirmTimer();
-			this->unsol.pState = &OutstationUnsolicitedStateConfirmWait::Inst();
-			this->BeginUnsolTx(response.ToRSlice());
+			this->RestartConfirmTimer();
+			this->state = &StateUnsolicitedConfirmWait::Inst();
+			this->BeginUnsolTx(response.GetControl(), response.ToRSlice());
 		}
 	}
 }
 
-bool OContext::StartSolicitedConfirmTimer()
+void OContext::RestartConfirmTimer()
 {
 	auto timeout = [&]()
 	{
-		this->sol.pState = this->sol.pState->OnConfirmTimeout(*this);
+		this->state = &this->state->OnConfirmTimeout(*this);
 		this->CheckForTaskStart();
 	};
-	return this->confirmTimer.Start(this->params.unsolConfirmTimeout, timeout);
+
+	this->confirmTimer.Restart(this->params.unsolConfirmTimeout, timeout);
 }
 
-bool OContext::StartUnsolicitedConfirmTimer()
-{
-	auto timeout = [this]()
-	{
-		this->unsol.pState = this->unsol.pState->OnConfirmTimeout(*this);
-		this->CheckForTaskStart();
-	};
-	return this->confirmTimer.Start(this->params.unsolConfirmTimeout, timeout);
-}
-
-OutstationSolicitedStateBase* OContext::RespondToNonReadRequest(const APDUHeader& header, const openpal::RSlice& objects)
+void OContext::RespondToNonReadRequest(const APDUHeader& header, const openpal::RSlice& objects)
 {
 	this->history.RecordLastProcessedRequest(header, objects);
 
@@ -374,11 +350,10 @@ OutstationSolicitedStateBase* OContext::RespondToNonReadRequest(const APDUHeader
 	response.SetControl(AppControlField(true, true, false, false, header.control.SEQ));
 	auto iin = this->HandleNonReadResponse(header, objects, writer);
 	response.SetIIN(iin | this->GetResponseIIN());
-	this->BeginResponseTx(response.ToRSlice());
-	return &OutstationSolicitedStateIdle::Inst();
+	this->BeginResponseTx(response.GetControl(), response.ToRSlice());
 }
 
-OutstationSolicitedStateBase* OContext::RespondToReadRequest(const APDUHeader& header, const openpal::RSlice& objects)
+OutstationState& OContext::RespondToReadRequest(const APDUHeader& header, const openpal::RSlice& objects)
 {
 	this->history.RecordLastProcessedRequest(header, objects);
 
@@ -390,20 +365,20 @@ OutstationSolicitedStateBase* OContext::RespondToReadRequest(const APDUHeader& h
 	this->sol.seq.confirmNum = header.control.SEQ;
 	response.SetControl(result.second);
 	response.SetIIN(result.first | this->GetResponseIIN());
-	this->BeginResponseTx(response.ToRSlice());
+	this->BeginResponseTx(response.GetControl(), response.ToRSlice());
 
 	if (result.second.CON)
 	{
-		this->StartSolicitedConfirmTimer();
-		return &OutstationStateSolicitedConfirmWait::Inst();
+		this->RestartConfirmTimer();
+		return StateSolicitedConfirmWait::Inst();
 	}
 	else
 	{
-		return  &OutstationSolicitedStateIdle::Inst();
+		return StateIdle::Inst();
 	}
 }
 
-OutstationSolicitedStateBase* OContext::ContinueMultiFragResponse(const AppSeqNum& seq)
+OutstationState& OContext::ContinueMultiFragResponse(const AppSeqNum& seq)
 {
 	auto response = this->sol.tx.Start();
 	auto writer = response.GetWriter();
@@ -413,16 +388,16 @@ OutstationSolicitedStateBase* OContext::ContinueMultiFragResponse(const AppSeqNu
 	this->sol.seq.confirmNum = seq;
 	response.SetControl(control);
 	response.SetIIN(this->GetResponseIIN());
-	this->BeginResponseTx(response.ToRSlice());
+	this->BeginResponseTx(response.GetControl(), response.ToRSlice());
 
 	if (control.CON)
 	{
-		this->StartSolicitedConfirmTimer();
-		return &OutstationStateSolicitedConfirmWait::Inst();
+		this->RestartConfirmTimer();
+		return StateSolicitedConfirmWait::Inst();
 	}
 	else
 	{
-		return &OutstationSolicitedStateIdle::Inst();
+		return StateIdle::Inst();
 	}
 }
 
@@ -433,7 +408,7 @@ bool OContext::CanTransmit() const
 
 IINField OContext::GetResponseIIN()
 {
-	return this->staticIIN | this->GetDynamicIIN() | this->pApplication->GetApplicationIIN().ToIIN();
+	return this->staticIIN | this->GetDynamicIIN() | this->application->GetApplicationIIN().ToIIN();
 }
 
 IINField OContext::GetDynamicIIN()
@@ -477,8 +452,7 @@ void OContext::ParseHeader(const openpal::RSlice& apdu)
 
 	auto objects = apdu.Skip(APDU_REQUEST_HEADER_SIZE);
 
-	// this method is virtual, and the implementation may vary for SA
-	this->ReceiveParsedHeader(apdu, header, objects);
+	this->ProcessAPDU(apdu, header, objects);
 }
 
 void OContext::CheckForTaskStart()
@@ -493,7 +467,7 @@ void OContext::SetRestartIIN()
 	this->staticIIN.SetBit(IINBit::DEVICE_RESTART);
 }
 
-IDatabase& OContext::GetDatabase()
+IUpdateHandler& OContext::GetUpdateHanlder()
 {
 	return this->database;
 }
@@ -569,7 +543,7 @@ Pair<IINField, AppControlField> OContext::HandleRead(const openpal::RSlice& obje
 
 IINField OContext::HandleWrite(const openpal::RSlice& objects)
 {
-	WriteHandler handler(*this->pApplication, &this->staticIIN);
+	WriteHandler handler(*this->application, &this->staticIIN);
 	auto result = APDUParser::Parse(objects, handler, &this->logger);
 	return (result == ParseResult::OK) ? handler.Errors() : IINFromParseResult(result);
 }
@@ -584,7 +558,7 @@ IINField OContext::HandleDirectOperate(const openpal::RSlice& objects, OperateTy
 	}
 	else
 	{
-		CommandActionAdapter adapter(this->pCommandHandler, false, opType);
+		CommandActionAdapter adapter(this->commandHandler.get(), false, opType);
 		CommandResponseHandler handler(this->params.maxControlsPerRequest, &adapter, pWriter);
 		auto result = APDUParser::Parse(objects, handler, &this->logger);
 		return (result == ParseResult::OK) ? handler.Errors() : IINFromParseResult(result);
@@ -602,14 +576,14 @@ IINField OContext::HandleSelect(const openpal::RSlice& objects, HeaderWriter& wr
 	else
 	{
 		// the 'OperateType' is just ignored  since it's a select
-		CommandActionAdapter adapter(this->pCommandHandler, true, OperateType::DirectOperate);
+		CommandActionAdapter adapter(this->commandHandler.get(), true, OperateType::DirectOperate);
 		CommandResponseHandler handler(this->params.maxControlsPerRequest, &adapter, &writer);
 		auto result = APDUParser::Parse(objects, handler, &this->logger);
 		if (result == ParseResult::OK)
 		{
 			if (handler.AllCommandsSuccessful())
 			{
-				this->control.Select(this->sol.seq.num, this->pExecutor->GetTime(), objects);
+				this->control.Select(this->sol.seq.num, this->executor->GetTime(), objects);
 			}
 
 			return handler.Errors();
@@ -631,12 +605,12 @@ IINField OContext::HandleOperate(const openpal::RSlice& objects, HeaderWriter& w
 	}
 	else
 	{
-		auto now = this->pExecutor->GetTime();
+		auto now = this->executor->GetTime();
 		auto result = this->control.ValidateSelection(this->sol.seq.num, now, this->params.selectTimeout, objects);
 
 		if (result == CommandStatus::SUCCESS)
 		{
-			CommandActionAdapter adapter(this->pCommandHandler, false, OperateType::SelectBeforeOperate);
+			CommandActionAdapter adapter(this->commandHandler.get(), false, OperateType::SelectBeforeOperate);
 			CommandResponseHandler handler(this->params.maxControlsPerRequest, &adapter, &writer);
 			auto result = APDUParser::Parse(objects, handler, &this->logger);
 			return (result == ParseResult::OK) ? handler.Errors() : IINFromParseResult(result);
@@ -668,7 +642,7 @@ IINField OContext::HandleRestart(const openpal::RSlice& objects, bool isWarmRest
 {
 	if (objects.IsEmpty())
 	{
-		auto mode = isWarmRestart ? this->pApplication->WarmRestartSupport() : this->pApplication->ColdRestartSupport();
+		auto mode = isWarmRestart ? this->application->WarmRestartSupport() : this->application->ColdRestartSupport();
 
 		switch (mode)
 		{
@@ -676,7 +650,7 @@ IINField OContext::HandleRestart(const openpal::RSlice& objects, bool isWarmRest
 			return IINField(IINBit::FUNC_NOT_SUPPORTED);
 		case(RestartMode::SUPPORTED_DELAY_COARSE) :
 			{
-				auto delay = isWarmRestart ? this->pApplication->WarmRestart() : this->pApplication->ColdRestart();
+				auto delay = isWarmRestart ? this->application->WarmRestart() : this->application->ColdRestart();
 				if (pWriter)
 				{
 					Group52Var1 coarse;
@@ -687,7 +661,7 @@ IINField OContext::HandleRestart(const openpal::RSlice& objects, bool isWarmRest
 			}
 		default:
 			{
-				auto delay = isWarmRestart ? this->pApplication->WarmRestart() : this->pApplication->ColdRestart();
+				auto delay = isWarmRestart ? this->application->WarmRestart() : this->application->ColdRestart();
 				if (pWriter)
 				{
 					Group52Var2 fine;
@@ -707,9 +681,9 @@ IINField OContext::HandleRestart(const openpal::RSlice& objects, bool isWarmRest
 
 IINField OContext::HandleAssignClass(const openpal::RSlice& objects)
 {
-	if (this->pApplication->SupportsAssignClass())
+	if (this->application->SupportsAssignClass())
 	{
-		AssignClassHandler handler(*this->pExecutor, *this->pApplication, this->database.GetClassAssigner());
+		AssignClassHandler handler(*this->executor, *this->application, this->database.GetClassAssigner());
 		auto result = APDUParser::Parse(objects, handler, &this->logger, ParserSettings::NoContents());
 		return (result == ParseResult::OK) ? handler.Errors() : IINFromParseResult(result);
 	}

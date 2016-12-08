@@ -23,27 +23,33 @@
 
 #include "IAsyncChannel.h"
 
-#include <asio.hpp>
-
 namespace asiopal
 {
+
 class SocketChannel final : public IAsyncChannel
 {
+
 public:
 
-	static std::unique_ptr<IAsyncChannel> Create(asio::ip::tcp::socket socket);
+	static std::shared_ptr<IAsyncChannel> Create(std::shared_ptr<Executor> executor, asio::ip::tcp::socket socket)
+	{
+		return std::make_shared<SocketChannel>(executor, std::move(socket));
+	}
 
-	virtual void BeginRead(openpal::WSlice& buffer, const ReadCallbackT& callback) override;
-	virtual void BeginWrite(const openpal::RSlice& buffer, const WriteCallbackT& callback)  override;
-	virtual void BeginShutdown(const ShutdownCallbackT& callback)  override;
+	SocketChannel(std::shared_ptr<Executor> executor, asio::ip::tcp::socket socket);
+
+protected:
+
+	virtual void BeginReadImpl(openpal::WSlice buffer) override;
+	virtual void BeginWriteImpl(const openpal::RSlice& buffer)  override;
+	virtual void ShutdownImpl()  override;
 
 private:
 
-	SocketChannel(asio::ip::tcp::socket socket);
-
-	asio::ip::tcp::socket m_socket;
+	asio::ip::tcp::socket socket;
 
 };
+
 }
 
 #endif

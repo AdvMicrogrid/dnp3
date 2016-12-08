@@ -32,9 +32,8 @@ using namespace openpal;
 namespace opendnp3
 {
 
-LinkLayerParser::LinkLayerParser(const Logger& logger_, LinkChannelStatistics* pStatistics_) :
-	logger(logger_),
-	pStatistics(pStatistics_),
+LinkLayerParser::LinkLayerParser(const Logger& logger) :
+	logger(logger),
 	state(State::FindSync),
 	frameSize(0),
 	buffer(rxBuffer, LPDU_MAX_FRAME_SIZE)
@@ -60,10 +59,7 @@ void LinkLayerParser::OnRead(uint32_t numBytes, IFrameSink& sink)
 
 	while (ParseUntilComplete() == State::Complete)
 	{
-		if (pStatistics)
-		{
-			++pStatistics->numLinkFrameRx;
-		}
+		++statistics.numLinkFrameRx;
 		this->PushFrame(sink);
 		state = State::FindSync;
 	}
@@ -186,14 +182,13 @@ bool LinkLayerParser::ReadHeader()
 		}
 		else
 		{
-			if (pStatistics) ++pStatistics->numBadLinkFrameRx;
 			return false;
 		}
 	}
 	else
 	{
-		if (pStatistics) ++pStatistics->numCrcError;
-		SIMPLE_LOG_BLOCK_WITH_CODE(logger, flags::ERR, DLERR_CRC, "CRC failure in header");
+		++statistics.numHeaderCrcError;
+		SIMPLE_LOG_BLOCK(logger, flags::WARN, "CRC failure in header");
 		return false;
 	}
 }
@@ -216,11 +211,8 @@ bool LinkLayerParser::ValidateBody()
 	}
 	else
 	{
-		SIMPLE_LOG_BLOCK_WITH_CODE(logger, flags::ERR, DLERR_CRC, "CRC failure in body");
-		if (pStatistics)
-		{
-			++pStatistics->numCrcError;
-		}
+		++this->statistics.numBodyCrcError;
+		SIMPLE_LOG_BLOCK(logger, flags::ERR, "CRC failure in body");
 		return false;
 	}
 }
@@ -229,12 +221,10 @@ bool LinkLayerParser::ValidateHeaderParameters()
 {
 	if(!header.ValidLength())
 	{
-		FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::ERR, DLERR_INVALID_LENGTH, "LENGTH out of range [5,255]: %i", header.GetLength());
+		++statistics.numBadLength;
+		FORMAT_LOG_BLOCK(logger, flags::ERR, "LENGTH out of range [5,255]: %i", header.GetLength());
 		return false;
 	}
-
-	// some combinations of these header parameters are invalid
-	// check for them here
 
 	//Now make sure that the function code is known and that the FCV is appropriate
 	if (!this->ValidateFunctionCode())
@@ -246,50 +236,26 @@ bool LinkLayerParser::ValidateHeaderParameters()
 	frameSize = LinkFrame::CalcFrameSize(user_data_length);
 	LinkFunction func = header.GetFuncEnum();
 
-	// make sure that the presence/absence of user data
-	// matches the function code
-	if(func == LinkFunction::PRI_CONFIRMED_USER_DATA || func == LinkFunction::PRI_UNCONFIRMED_USER_DATA)
-	{
-		if(user_data_length > 0)
-		{
-			frameSize = LinkFrame::CalcFrameSize(user_data_length);
-		}
-		else
-		{
-			FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::ERR, DLERR_NO_DATA, "User data with no payload. FUNCTION: %s", LinkFunctionToString(func));
-			return false;
-		}
-	}
-	else
-	{
-		if(user_data_length > 0)
-		{
-			FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::ERR, DLERR_UNEXPECTED_DATA, "Unexpected LENGTH in frame: %i with FUNCTION: %s", user_data_length, LinkFunctionToString(func));
-			return false;
-		}
+	const bool has_payload = user_data_length > 0;
+	const bool should_have_payload = (func == LinkFunction::PRI_CONFIRMED_USER_DATA || func == LinkFunction::PRI_UNCONFIRMED_USER_DATA);
 
+	// make sure that the presence/absence of user data matches the function code
+	if(should_have_payload && !has_payload)
+	{
+		++statistics.numBadLength;
+		FORMAT_LOG_BLOCK(logger, flags::ERR, "User data with no payload. FUNCTION: %s", LinkFunctionToString(func));
+		return false;
 	}
 
-	if(user_data_length > 0)
+	if (!should_have_payload && has_payload)
 	{
-		if(func == LinkFunction::PRI_CONFIRMED_USER_DATA || func == LinkFunction::PRI_UNCONFIRMED_USER_DATA)
-		{
+		++statistics.numBadLength;
+		FORMAT_LOG_BLOCK(logger, flags::ERR, "Unexpected LENGTH in frame: %i with FUNCTION: %s", user_data_length, LinkFunctionToString(func));
+		return false;
+	}
 
-		}
-		else
-		{
-			FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::ERR, DLERR_UNEXPECTED_DATA, "Unexpected LENGTH in frame: %i with FUNCTION: %s", user_data_length, LinkFunctionToString(func));
-			return false;
-		}
-	}
-	else
-	{
-		if(func == LinkFunction::PRI_CONFIRMED_USER_DATA || func == LinkFunction::PRI_UNCONFIRMED_USER_DATA)
-		{
-			FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::ERR, DLERR_NO_DATA, "User data packet received with zero payload. FUNCTION: %s", LinkFunctionToString(func));
-			return false;
-		}
-	}
+	// calculate the total frame size
+	frameSize = LinkFrame::CalcFrameSize(user_data_length);
 
 	return true;
 }
@@ -319,7 +285,8 @@ bool LinkLayerParser::ValidateFunctionCode()
 			break;
 		default:
 			{
-				FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::WARN, DLERR_UNKNOWN_FUNC, "Unknown PriToSec FUNCTION: %s", LinkFunctionToString(header.GetFuncEnum()));
+				++statistics.numBadFunctionCode;
+				FORMAT_LOG_BLOCK(logger, flags::WARN, "Unknown PriToSec FUNCTION: %s", LinkFunctionToString(header.GetFuncEnum()));
 				return false;
 			}
 		}
@@ -327,7 +294,8 @@ bool LinkLayerParser::ValidateFunctionCode()
 		//now check the fcv
 		if(fcv_set != header.IsFcvDfcSet())
 		{
-			FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::WARN, DLERR_UNEXPECTED_FCV, "Bad FCV for FUNCTION: %s", LinkFunctionToString(header.GetFuncEnum()));
+			++statistics.numBadFCV;
+			FORMAT_LOG_BLOCK(logger, flags::WARN, "Bad FCV for FUNCTION: %s", LinkFunctionToString(header.GetFuncEnum()));
 			return false;
 		}
 
@@ -345,7 +313,8 @@ bool LinkLayerParser::ValidateFunctionCode()
 			break;
 		default:
 			{
-				FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::ERR, DLERR_UNKNOWN_FUNC, "Unknown SecToPri FUNCTION: %s", LinkFunctionToString(header.GetFuncEnum()));
+				++statistics.numBadFunctionCode;
+				FORMAT_LOG_BLOCK(logger, flags::ERR, "Unknown SecToPri FUNCTION: %s", LinkFunctionToString(header.GetFuncEnum()));
 				return false;
 			}
 		}
@@ -353,7 +322,8 @@ bool LinkLayerParser::ValidateFunctionCode()
 		//now check the fcb, it should always be zero
 		if(header.IsFcbSet())
 		{
-			FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::ERR, DLERR_UNEXPECTED_FCB, "FCB set for SecToPri FUNCTION: %s", LinkFunctionToString(header.GetFuncEnum()));
+			++statistics.numBadFCB;
+			FORMAT_LOG_BLOCK(logger, flags::ERR, "FCB set for SecToPri FUNCTION: %s", LinkFunctionToString(header.GetFuncEnum()));
 			return false;
 		}
 	}

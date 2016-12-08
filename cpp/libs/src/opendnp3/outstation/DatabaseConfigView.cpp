@@ -24,71 +24,24 @@ namespace opendnp3
 {
 
 DatabaseConfigView::DatabaseConfigView(
-    openpal::ArrayView<Cell<Binary>, uint16_t> binaries_,
-    openpal::ArrayView<Cell<DoubleBitBinary>, uint16_t> doubleBinaries_,
-    openpal::ArrayView<Cell<Analog>, uint16_t> analogs_,
-    openpal::ArrayView<Cell<Counter>, uint16_t> counters_,
-    openpal::ArrayView<Cell<FrozenCounter>, uint16_t> frozenCounters_,
-    openpal::ArrayView<Cell<BinaryOutputStatus>, uint16_t> binaryOutputStatii_,
-    openpal::ArrayView<Cell<AnalogOutputStatus>, uint16_t> analogOutputStatii_,
-    openpal::ArrayView<Cell<TimeAndInterval>, uint16_t> timeAndIntervals_
+    openpal::ArrayView<Cell<BinarySpec>, uint16_t> binaries,
+    openpal::ArrayView<Cell<DoubleBitBinarySpec>, uint16_t> doubleBinaries,
+    openpal::ArrayView<Cell<AnalogSpec>, uint16_t> analogs,
+    openpal::ArrayView<Cell<CounterSpec>, uint16_t> counters,
+    openpal::ArrayView<Cell<FrozenCounterSpec>, uint16_t> frozenCounters,
+    openpal::ArrayView<Cell<BinaryOutputStatusSpec>, uint16_t> binaryOutputStatii,
+    openpal::ArrayView<Cell<AnalogOutputStatusSpec>, uint16_t> analogOutputStatii,
+    openpal::ArrayView<Cell<TimeAndIntervalSpec>, uint16_t> timeAndIntervals
 ) :
-	binaries(binaries_),
-	doubleBinaries(doubleBinaries_),
-	analogs(analogs_),
-	counters(counters_),
-	frozenCounters(frozenCounters_),
-	binaryOutputStatii(binaryOutputStatii_),
-	analogOutputStatii(analogOutputStatii_),
-	timeAndIntervals(timeAndIntervals_)
+	binaries(binaries),
+	doubleBinaries(doubleBinaries),
+	analogs(analogs),
+	counters(counters),
+	frozenCounters(frozenCounters),
+	binaryOutputStatii(binaryOutputStatii),
+	analogOutputStatii(analogOutputStatii),
+	timeAndIntervals(timeAndIntervals)
 {}
-
-void DatabaseConfigView::SetInitialValue(const Binary& meas, uint16_t index)
-{
-	binaries[index].value = meas;
-	binaries[index].metadata.lastEvent = meas;
-}
-
-void DatabaseConfigView::SetInitialValue(const DoubleBitBinary& meas, uint16_t index)
-{
-	doubleBinaries[index].value = meas;
-	doubleBinaries[index].metadata.lastEvent = meas;
-}
-
-void DatabaseConfigView::SetInitialValue(const Analog& meas, uint16_t index)
-{
-	analogs[index].value = meas;
-	analogs[index].metadata.lastEvent = meas;
-}
-
-void DatabaseConfigView::SetInitialValue(const Counter& meas, uint16_t index)
-{
-	counters[index].value = meas;
-	counters[index].metadata.lastEvent = meas;
-}
-
-void DatabaseConfigView::SetInitialValue(const FrozenCounter& meas, uint16_t index)
-{
-	frozenCounters[index].value = meas;
-	frozenCounters[index].metadata.lastEvent = meas;
-}
-
-void DatabaseConfigView::SetInitialValue(const BinaryOutputStatus& meas, uint16_t index)
-{
-	binaryOutputStatii[index].value = meas;
-	binaryOutputStatii[index].metadata.lastEvent = meas;
-}
-
-void DatabaseConfigView::SetInitialValue(const AnalogOutputStatus& meas, uint16_t index)
-{
-	analogOutputStatii[index].value = meas;
-	analogOutputStatii[index].metadata.lastEvent = meas;
-}
-
-void DatabaseConfigView::SetInitialValue(const TimeAndInterval& meas, uint16_t index)
-{
-	timeAndIntervals[index].value = meas;
-}
 
 }
 

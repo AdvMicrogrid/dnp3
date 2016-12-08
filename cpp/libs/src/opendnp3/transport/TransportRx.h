@@ -32,8 +32,6 @@
 namespace opendnp3
 {
 
-class TransportLayer;
-
 /**
 State/validation for the DNP3 transport layer's receive channel.
 */
@@ -41,11 +39,16 @@ class TransportRx
 {
 
 public:
-	TransportRx(const openpal::Logger&, uint32_t maxRxFragSize, StackStatistics* pStatistics);
+	TransportRx(const openpal::Logger&, uint32_t maxRxFragSize);
 
 	openpal::RSlice ProcessReceive(const openpal::RSlice& input);
 
 	void Reset();
+
+	const StackStatistics::Transport::Rx& Statistics() const
+	{
+		return statistics;
+	}
 
 private:
 
@@ -56,7 +59,7 @@ private:
 	bool ValidateHeader(bool fir, uint8_t sequence);
 
 	openpal::Logger logger;
-	StackStatistics* pStatistics;
+	StackStatistics::Transport::Rx statistics;
 
 	openpal::Buffer rxBuffer;
 	uint32_t numBytesRead;

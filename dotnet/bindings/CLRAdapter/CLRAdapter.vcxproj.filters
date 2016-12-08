@@ -66,16 +66,7 @@
     <ClInclude Include="src\TaskCallbackAdapter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\MasterApplicationAdapterSA.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\MasterConversions.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\MasterAdapterSA.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\SAConversions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\CallbackAdapters.h">
@@ -99,10 +90,10 @@
     <ClInclude Include="src\SessionAcceptorAdapter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\DNP3SessionManagerAdapter.h">
+    <ClInclude Include="src\ListenerAdapter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ListenerAdapter.h">
+    <ClInclude Include="src\ChannelListenerAdapter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -123,9 +114,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\LogAdapter.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\MasterScanAdapter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\OutstationAdapter.cpp">
@@ -149,9 +137,6 @@
     <ClCompile Include="src\CommandSetBuilder.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\DNP3SessionManagerAdapter.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\ListenCallbacksAdapter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -164,10 +149,10 @@
     <ClCompile Include="src\SessionAcceptorAdapter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ListenerAdapter.cpp">
+    <ClCompile Include="src\MasterAdapter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\MasterAdapter.cpp">
+    <ClCompile Include="src\StdIOWorkaround.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

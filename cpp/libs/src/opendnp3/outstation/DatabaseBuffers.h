@@ -26,7 +26,7 @@
 #include "opendnp3/gen/IndexMode.h"
 
 #include "opendnp3/outstation/IndexSearch.h"
-#include "opendnp3/outstation/DatabaseTemplate.h"
+#include "opendnp3/outstation/DatabaseSizes.h"
 #include "opendnp3/outstation/StaticBuffers.h"
 #include "opendnp3/outstation/SelectedRanges.h"
 #include "opendnp3/outstation/StaticTypeBitfield.h"
@@ -46,7 +46,7 @@ class DatabaseBuffers : public IStaticSelector, public IResponseLoader, public I
 {
 public:
 
-	DatabaseBuffers(const DatabaseTemplate&, StaticTypeBitField allowedClass0Types, IndexMode indexMode);
+	DatabaseBuffers(const DatabaseSizes&, StaticTypeBitField allowedClass0Types, IndexMode indexMode);
 
 	// ------- IStaticSelector -------------
 
@@ -79,27 +79,27 @@ private:
 
 	SelectedRanges ranges;
 
-	template <class T>
+	template <class Spec>
 	bool LoadType(HeaderWriter& writer);
 
-	template <class T>
+	template <class Spec>
 	void Deselect()
 	{
-		auto range = ranges.Get<T>();
+		auto range = ranges.Get<Spec>();
 		if (range.IsValid())
 		{
-			auto view = buffers.GetArrayView<T>();
+			auto view = buffers.GetArrayView<Spec>();
 			for (uint16_t i = range.start; i <= range.stop; ++i)
 			{
 				view[i].selection.selected = false;
 			}
-			ranges.Clear<T>();
+			ranges.Clear<Spec>();
 		}
 	}
 
 	//specialization for binary in cpp file
-	template <class T>
-	static typename T::StaticVariation  CheckForPromotion(const T& value, typename T::StaticVariation variation)
+	template <class Spec>
+	static typename Spec::static_variation_t  CheckForPromotion(const typename Spec::meas_t& value, typename Spec::static_variation_t variation)
 	{
 		return variation;
 	}
@@ -111,10 +111,10 @@ private:
 	    Range range,
 	    openpal::ArrayView<Cell<T>, uint16_t> view,
 	    bool useDefault,
-	    typename T::StaticVariation variation
+	    typename T::static_variation_t variation
 	);
 
-	template <class T>
+	template <class Spec>
 	Range AssignClassTo(PointClass clazz, const Range& range);
 
 	template <class T>
@@ -130,18 +130,18 @@ private:
 	IINField SelectAll()
 	{
 		auto view = buffers.GetArrayView<T>();
-		return GenericSelect(RangeOf(view.Size()), view, true, typename T::StaticVariation());
+		return GenericSelect(RangeOf(view.Size()), view, true, typename T::static_variation_t());
 	}
 
 	template <class T>
-	IINField SelectAllUsing(typename T::StaticVariation variation)
+	IINField SelectAllUsing(typename T::static_variation_t variation)
 	{
 		auto view = buffers.GetArrayView<T>();
 		return GenericSelect(RangeOf(view.Size()), view, false, variation);
 	}
 
 	template <class T>
-	IINField SelectVirtualRange(const Range& range, bool usedefault, typename T::StaticVariation variation)
+	IINField SelectVirtualRange(const Range& range, bool usedefault, typename T::static_variation_t variation)
 	{
 		if (indexMode == IndexMode::Discontiguous)
 		{
@@ -167,11 +167,11 @@ private:
 	template <class T>
 	IINField SelectRange(const Range& range)
 	{
-		return SelectVirtualRange<T>(range, true, typename T::StaticVariation());
+		return SelectVirtualRange<T>(range, true, typename T::static_variation_t());
 	}
 
 	template <class T>
-	IINField SelectRangeUsing(const Range& range, typename T::StaticVariation variation)
+	IINField SelectRangeUsing(const Range& range, typename T::static_variation_t variation)
 	{
 		return SelectVirtualRange<T>(range, false, variation);
 	}
@@ -182,7 +182,7 @@ IINField DatabaseBuffers::GenericSelect(
     Range range,
     openpal::ArrayView<Cell<T>, uint16_t> view,
     bool useDefault,
-    typename T::StaticVariation variation)
+    typename T::static_variation_t variation)
 {
 	if (range.IsValid())
 	{
@@ -203,7 +203,7 @@ IINField DatabaseBuffers::GenericSelect(
 				{
 					view[i].selection.selected = true;
 					view[i].selection.value = view[i].value;
-					auto var = useDefault ? view[i].variation : variation;
+					auto var = useDefault ? view[i].config.svariation : variation;
 					view[i].selection.variation = CheckForPromotion<T>(view[i].selection.value, var);
 				}
 			}
@@ -262,14 +262,14 @@ bool DatabaseBuffers::LoadType(HeaderWriter& writer)
 	}
 }
 
-template <class T>
+template <class Spec>
 Range DatabaseBuffers::AssignClassTo(PointClass clazz, const Range& range)
 {
-	auto view = buffers.GetArrayView<T>();
+	auto view = buffers.GetArrayView<Spec>();
 	auto clipped = range.Intersection(RangeOf(view.Size()));
 	for (auto i = clipped.start; i <= clipped.stop; ++i)
 	{
-		view[i].metadata.clazz = clazz;
+		view[i].config.clazz = clazz;
 	}
 	return clipped;
 }

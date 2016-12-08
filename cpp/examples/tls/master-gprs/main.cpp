@@ -18,7 +18,7 @@
  * may have been made to this file. Automatak, LLC licenses these modifications
  * to you under the terms of the License.
  */
-#include <asiodnp3/GPRSManager.h>
+#include <asiodnp3/DNP3Manager.h>
 #include <asiodnp3/ConsoleLogger.h>
 #include <asiodnp3/DefaultListenCallbacks.h>
 
@@ -56,10 +56,9 @@ int main(int argc, char* argv[])
 	const auto NUM_THREAD = std::thread::hardware_concurrency();
 
 	auto callbacks = std::make_shared<DefaultListenCallbacks>();
-	auto log_handler = std::make_shared<ConsoleLogger>();
 
 	// This is the main point of interaction with the stack
-	GPRSManager manager(NUM_THREAD, log_handler);
+	DNP3Manager manager(NUM_THREAD, ConsoleLogger::Create());
 
 	std::error_code ec;
 	auto server1 = manager.CreateListener(

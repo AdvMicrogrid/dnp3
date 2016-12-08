@@ -23,9 +23,6 @@
 #include <openpal/logging/LogMacros.h>
 #include <openpal/logging/LogLevels.h>
 
-#include <chrono>
-#include <sstream>
-
 #include <asiopal/SteadyClock.h>
 
 using namespace std;
@@ -36,48 +33,40 @@ namespace asiopal
 {
 
 ThreadPool::ThreadPool(
-    openpal::ILogHandler* handler,
-    uint32_t levels,
+    const openpal::Logger& logger,
+    const std::shared_ptr<IO>& io,
     uint32_t concurrency,
-    std::function<void()> onThreadStart_,
-    std::function<void()> onThreadExit_) :
-	root(handler, "pool", levels),
-	onThreadStart(onThreadStart_),
-	onThreadExit(onThreadExit_),
+    std::function<void()> onThreadStart,
+    std::function<void()> onThreadExit) :
+	logger(logger),
+	io(io),
+	onThreadStart(onThreadStart),
+	onThreadExit(onThreadExit),
 	isShutdown(false),
-	ioservice(std::make_shared<asio::io_service>()),
-	infiniteTimer(*ioservice)
+	infiniteTimer(io->service)
 {
 	if(concurrency == 0)
 	{
 		concurrency = 1;
-		SIMPLE_LOG_BLOCK(root.logger, logflags::WARN, "Concurrency was set to 0, defaulting to 1 thread");
+		SIMPLE_LOG_BLOCK(this->logger, logflags::WARN, "Concurrency was set to 0, defaulting to 1 thread");
 	}
-	infiniteTimer.expires_at(asiopal::asiopal_steady_clock::time_point::max());
+
+	infiniteTimer.expires_at(asiopal::steady_clock_t::time_point::max());
 	infiniteTimer.async_wait([](const std::error_code&) {});
 	for(uint32_t i = 0; i < concurrency; ++i)
 	{
-		threads.push_back(new thread(bind(&ThreadPool::Run, this)));
+		auto run = [this, i]()
+		{
+			this->Run(i);
+		};
+		threads.push_back(std::make_unique<thread>(run));
 	}
-}
-
-std::shared_ptr<ThreadPool> ThreadPool::Create(
-    openpal::ILogHandler* handler,
-    uint32_t levels,
-    uint32_t concurrency,
-    std::function<void()> onThreadStart,
-    std::function<void()> onThreadExit)
-{
-	return std::make_shared<ThreadPool>(handler, levels, concurrency, onThreadStart, onThreadExit);
 }
 
 ThreadPool::~ThreadPool()
 {
 	this->Shutdown();
-	for(auto pThread : threads)
-	{
-		delete pThread;
-	}
+	threads.clear();
 }
 
 void ThreadPool::Shutdown()
@@ -86,22 +75,23 @@ void ThreadPool::Shutdown()
 	{
 		isShutdown = true;
 		infiniteTimer.cancel();
-		for (auto pThread : threads)
+		for (auto& thread : threads)
 		{
-			pThread->join();
+			thread->join();
 		}
 	}
 }
 
-asio::io_service& ThreadPool::GetIOService()
-{
-	return *ioservice;
-}
-
-void ThreadPool::Run()
+void ThreadPool::Run(int threadnum)
 {
 	onThreadStart();
-	ioservice->run();
+
+	FORMAT_LOG_BLOCK(this->logger, logflags::INFO, "Starting thread (%d)", threadnum);
+
+	this->io->service.run();
+
+	FORMAT_LOG_BLOCK(this->logger, logflags::INFO, "Exiting thread (%d)", threadnum);
+
 	onThreadExit();
 }
 

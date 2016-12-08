@@ -21,14 +21,7 @@
 #ifndef OPENDNP3_SECURITYSTATISTIC_H
 #define OPENDNP3_SECURITYSTATISTIC_H
 
-
-#include "opendnp3/Types.h"
-#include "opendnp3/app/EventType.h"
-#include "opendnp3/app/EventMetadata.h"
-#include "opendnp3/gen/StaticSecurityStatVariation.h"
-#include "opendnp3/gen/EventSecurityStatVariation.h"
-
-#include "opendnp3/gen/StaticTypeBitmask.h"
+#include "opendnp3/app/DNPTime.h"
 
 namespace opendnp3
 {
@@ -57,21 +50,9 @@ public:
 
 	SecurityStat(uint8_t quality, uint16_t assocId, uint32_t count, DNPTime time);
 
-	bool IsEvent(const SecurityStat& newValue, uint32_t deadband) const;
-
 	uint8_t quality;	//	bitfield that stores type specific quality flags
 	Value value;		//	assocId and count
 	DNPTime time;		//	timestamp associated with the measurement (may not be set)
-
-	const static EventType EventTypeEnum = EventType::SecurityStat;
-	//const static StaticTypeBitmask StaticTypeEnum = StaticTypeBitmask::SecurityStat;
-	const static EventSecurityStatVariation DefaultEventVariation = EventSecurityStatVariation::Group122Var1;
-	const static StaticSecurityStatVariation DefaultStaticVariation = StaticSecurityStatVariation::Group121Var1;
-
-	typedef Value ValueType;
-	typedef EventSecurityStatVariation EventVariation;
-	typedef StaticSecurityStatVariation StaticVariation;
-	typedef DeadbandMetadata<SecurityStat, uint32_t> MetadataType;
 };
 
 }
