@@ -7,7 +7,7 @@ if (UNIX)
 		set(LIB_TYPE SHARED)
 	endif()
 	
-	set(CMAKE_C_FLAGS "-Wall -Wno-multichar -Wunused-variable -Wno-unused-parameter -Wunused-function -Wunused -Wno-system-headers -Wwrite-strings -fprofile-arcs -ftest-coverage -save-temps")
+	set(CMAKE_C_FLAGS "-Wall -Wno-multichar -Wunused-variable -Wno-unused-parameter -Wunused-function -Wunused -Wno-system-headers -Wwrite-strings -save-temps")
 
 	if (${CYGWIN})
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
@@ -38,7 +38,6 @@ if (UNIX)
 	endif ()
 
 	if(COVERAGE)
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
 	endif()
 
