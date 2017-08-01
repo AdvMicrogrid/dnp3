@@ -25,45 +25,47 @@
 #include <openpal/container/WSlice.h>
 #include <openpal/logging/Logger.h>
 
-#include "opendnp3/ErrorCodes.h"
-
 #include "opendnp3/link/ShiftableBuffer.h"
 #include "opendnp3/link/LinkFrame.h"
 #include "opendnp3/link/LinkHeader.h"
-#include "opendnp3/link/LinkChannelStatistics.h"
+#include "opendnp3/link/LinkStatistics.h"
+#include "opendnp3/link/IFrameSink.h"
 
 namespace opendnp3
 {
-
-class IFrameSink;
 
 /// Parses FT3 frames
 class LinkLayerParser
 {
 	enum class State
 	{
-	    FindSync,
-	    ReadHeader,
-	    ReadBody,
-	    Complete
+		FindSync,
+		ReadHeader,
+		ReadBody,
+		Complete
 	};
 
 public:
 
 	/// @param logger_ Logger that the receiver is to use.
 	/// @param pSink_ Completely parsed frames are sent to this interface
-	LinkLayerParser(const openpal::Logger& logger, LinkChannelStatistics* pStatistics_ = nullptr);
+	LinkLayerParser(const openpal::Logger& logger);
 
 	/// Called when valid data has been written to the current buffer write position
 	/// Parses the new data and calls the specified frame sink
 	/// @param numBytes Number of bytes written
-	void OnRead(uint32_t numBytes, IFrameSink* pSink);
+	void OnRead(uint32_t numBytes, IFrameSink& sink);
 
 	/// @return Buffer that can currently be used for writing
 	openpal::WSlice WriteBuff() const;
 
 	/// Resets the state of parser
 	void Reset();
+
+	const LinkStatistics::Parser& Statistics() const
+	{
+		return this->statistics;
+	}
 
 private:
 
@@ -73,7 +75,7 @@ private:
 	State ParseHeader();
 	State ParseBody();
 
-	void PushFrame(IFrameSink* pSink);
+	void PushFrame(IFrameSink& sink);
 
 	bool ReadHeader();
 	bool ValidateBody();
@@ -84,7 +86,7 @@ private:
 	void TransferUserData();
 
 	openpal::Logger logger;
-	LinkChannelStatistics* pStatistics;
+	LinkStatistics::Parser statistics;
 
 	LinkHeader header;
 

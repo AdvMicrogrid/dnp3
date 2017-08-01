@@ -21,19 +21,19 @@
 #ifndef ASIOPAL_LOGGING_CONNECTION_CONDITION_H
 #define ASIOPAL_LOGGING_CONNECTION_CONDITION_H
 
+#include <openpal/logging/Logger.h>
 #include <openpal/logging/LogMacros.h>
 #include <openpal/logging/LogLevels.h>
 
 namespace asiopal
 {
 
-
 class LoggingConnectionCondition
 {
 
 public:
 
-	LoggingConnectionCondition(openpal::Logger logger_) : logger(logger_)
+	LoggingConnectionCondition(openpal::Logger logger) : logger(logger)
 	{}
 
 	template <typename Iterator>
@@ -51,6 +51,7 @@ private:
 
 	openpal::Logger logger;
 };
+
 }
 
 #endif

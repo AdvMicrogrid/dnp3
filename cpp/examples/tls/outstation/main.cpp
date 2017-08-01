@@ -20,8 +20,9 @@
  */
 #include <asiodnp3/DNP3Manager.h>
 #include <asiodnp3/PrintingSOEHandler.h>
+#include <asiodnp3/PrintingChannelListener.h>
 #include <asiodnp3/ConsoleLogger.h>
-#include <asiodnp3/MeasUpdate.h>
+#include <asiodnp3/UpdateBuilder.h>
 
 #include <asiopal/UTCTimeSource.h>
 #include <opendnp3/outstation/SimpleCommandHandler.h>
@@ -40,26 +41,38 @@ using namespace openpal;
 using namespace asiopal;
 using namespace asiodnp3;
 
-void ConfigureDatabase(DatabaseConfigView view)
+void ConfigureDatabase(DatabaseConfig& config)
 {
 	// example of configuring analog index 0 for Class2 with floating point variations by default
-	view.analogs[0].variation = StaticAnalogVariation::Group30Var5;
-	view.analogs[0].metadata.clazz = PointClass::Class2;
-	view.analogs[0].metadata.variation = EventAnalogVariation::Group32Var7;
+	config.analog[0].clazz = PointClass::Class2;
+	config.analog[0].svariation = StaticAnalogVariation::Group30Var5;
+	config.analog[0].evariation = EventAnalogVariation::Group32Var7;
 }
+
+struct State
+{
+	uint32_t count = 0;
+	double value = 0;
+	bool binary = false;
+	DoubleBit dbit = DoubleBit::DETERMINED_OFF;
+};
+
+void AddUpdates(UpdateBuilder& builder, State& state, const std::string& arguments);
 
 int main(int argc, char* argv[])
 {
-	if (argc != 3)
+	if (argc != 4)
 	{
-		std::cout << "usage: outstation-tls-demo <peer certificate> <private key/certificate>" << std::endl;
+		std::cout << "usage: master-gprs-tls-demo <ca certificate> <certificate chain> <private key>" << std::endl;
 		return -1;
 	}
 
-	std::string peerCertificate(argv[1]);
-	std::string privateKey(argv[2]);
+	std::string caCertificate(argv[1]);
+	std::string certificateChain(argv[2]);
+	std::string privateKey(argv[3]);
 
-	std::cout << "Using peer cert: " << peerCertificate << std::endl;
+	std::cout << "Using CA certificate: " << caCertificate << std::endl;
+	std::cout << "Using certificate chain: " << certificateChain << std::endl;
 	std::cout << "Using private key file: " << privateKey << std::endl;
 
 	// Specify what log levels to use. NORMAL is warning and above
@@ -70,29 +83,37 @@ int main(int argc, char* argv[])
 	// Allocate a single thread to the pool since this is a single outstation
 	DNP3Manager manager(1, ConsoleLogger::Create());
 
-	// Create a TCP server (listener)
-	auto pChannel = manager.AddTLSServer(
-	                    "server",
-	                    FILTERS,
-	                    ChannelRetry::Default(),
-	                    "0.0.0.0",
-	                    20001,
-	                    TLSConfig(peerCertificate, privateKey, privateKey)
-	                );
+	std::error_code ec;
 
-	// Optionally, you can bind listeners to the channel to get state change notifications
-	// This listener just prints the changes to the console
-	pChannel->AddStateListener([](ChannelState state)
+	// Create a TCP server (listener)
+	auto channel = manager.AddTLSClient(
+	                   "server",
+	                   FILTERS,
+	                   ChannelRetry::Default(),
+	                   "127.0.0.1",
+	                   "0.0.0.0",
+	                   20001,
+	                   TLSConfig(
+	                       caCertificate,
+	                       certificateChain,
+	                       privateKey,
+	                       2
+	                   ),
+	                   PrintingChannelListener::Create(),
+	                   ec
+	               );
+
+	if (ec)
 	{
-		std::cout << "channel state: " << ChannelStateToString(state) << std::endl;
-	});
+		std::cout << "Unable to create tls server: " << ec.message() << std::endl;
+		return ec.value();
+	}
 
 	// The main object for a outstation. The defaults are useable,
 	// but understanding the options are important.
-	OutstationStackConfig stackConfig;
+	OutstationStackConfig stackConfig(DatabaseSizes::AllTypes(10));
 
-	// You must specify the shape of your database and the size of the event buffers
-	stackConfig.dbTemplate = DatabaseTemplate::AllTypes(10);
+	// specify the maximum size of the event buffers
 	stackConfig.outstation.eventBufferConfig = EventBufferConfig::AllTypes(10);
 
 	// you can override an default outstation parameters here
@@ -105,72 +126,71 @@ int main(int argc, char* argv[])
 	stackConfig.link.LocalAddr = 10;
 	stackConfig.link.RemoteAddr = 1;
 
+	// You can optionally change the default reporting variations or class assignment prior to enabling the outstation
+	ConfigureDatabase(stackConfig.dbConfig);
+
 	// Create a new outstation with a log level, command handler, and
 	// config info this	returns a thread-safe interface used for
 	// updating the outstation's database.
-	auto pOutstation = pChannel->AddOutstation("outstation", SuccessCommandHandler::Instance(), DefaultOutstationApplication::Instance(), stackConfig);
-
-	// You can optionally change the default reporting variations or class assignment prior to enabling the outstation
-	ConfigureDatabase(pOutstation->GetConfigView());
+	auto outstation = channel->AddOutstation("outstation", SuccessCommandHandler::Create(), DefaultOutstationApplication::Create(), stackConfig);
 
 	// Enable the outstation and start communications
-	pOutstation->Enable();
+	outstation->Enable();
 
 	// variables used in example loop
 	string input;
-	uint32_t count = 0;
-	double value = 0;
-	bool binary = false;
-	DoubleBit dbit = DoubleBit::DETERMINED_OFF;
+	State state;
 
 	while (true)
 	{
 		std::cout << "Enter one or more measurement changes then press <enter>" << std::endl;
-		std::cout << "c = counter, b = binary, d = doublebit, a = analog, x = exit" << std::endl;
+		std::cout << "c = counter, b = binary, d = doublebit, a = analog, 'quit' = exit" << std::endl;
 		std::cin >> input;
 
-		MeasUpdate tx(pOutstation, UTCTimeSource::Instance().Now());
-
-		for (char & c : input)
+		if (input == "quit") return 0;
+		else
 		{
-			switch (c)
-			{
-			case('c') :
-				{
-					tx.Update(Counter(count), 0);
-					++count;
-					break;
-				}
-			case('a') :
-				{
-					tx.Update(Analog(value), 0);
-					value += 1;
-					break;
-				}
-			case('b') :
-				{
-					tx.Update(Binary(binary), 0);
-					binary = !binary;
-					break;
-				}
-			case('d') :
-				{
-					tx.Update(DoubleBitBinary(dbit), 0);
-					dbit = (dbit == DoubleBit::DETERMINED_OFF) ? DoubleBit::DETERMINED_ON : DoubleBit::DETERMINED_OFF;
-					break;
-				}
-			case('x') :
-
-				// DNP3Manager destructor cleanups up everything automagically
-				return 0;
-
-			default:
-				std::cout << "No action registered for: " << c << std::endl;
-				break;
-			}
+			UpdateBuilder builder;
+			AddUpdates(builder, state, input);
+			outstation->Apply(builder.Build());
 		}
-
 	}
 
 	return 0;
+}
+
+void AddUpdates(UpdateBuilder& builder, State& state, const std::string& arguments)
+{
+	for (const char& c : arguments)
+	{
+		switch (c)
+		{
+		case('c'):
+			{
+				builder.Update(Counter(state.count), 0);
+				++state.count;
+				break;
+			}
+		case('a'):
+			{
+				builder.Update(Analog(state.value), 0);
+				state.value += 1;
+				break;
+			}
+		case('b'):
+			{
+				builder.Update(Binary(state.binary), 0);
+				state.binary = !state.binary;
+				break;
+			}
+		case('d'):
+			{
+				builder.Update(DoubleBitBinary(state.dbit), 0);
+				state.dbit = (state.dbit == DoubleBit::DETERMINED_OFF) ? DoubleBit::DETERMINED_ON : DoubleBit::DETERMINED_OFF;
+				break;
+			}
+		default:
+			break;
+		}
+	}
 }

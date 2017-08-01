@@ -31,21 +31,67 @@ namespace opendnp3
 */
 struct StackStatistics
 {
-	StackStatistics() :
-		numTransportRx(0),
-		numTransportTx(0),
-		numTransportErrorRx(0)
-	{}
+	struct Link
+	{
+		/// number of unexpected frames
+		uint32_t numUnexpectedFrame = 0;
 
-	/// Number of valid TPDU's received
-	uint32_t numTransportRx;
+		/// frames received w/ wrong master bit
+		uint32_t numBadMasterBit = 0;
 
-	/// Number of TPDUs transmitted
-	uint32_t numTransportTx;
+		/// frames received for an unknown destination
+		uint32_t numUnknownDestination = 0;
 
-	/// Number of TPDUs dropped due to malformed contents, bad seq, etc
-	uint32_t numTransportErrorRx;
+		/// frames received for an unknown source
+		uint32_t numUnknownSource = 0;
+	};
+
+	struct Transport
+	{
+		struct Rx
+		{
+			/// Number of valid TPDU's received
+			uint32_t numTransportRx = 0;
+
+			/// Number of TPDUs dropped due to malformed contents
+			uint32_t numTransportErrorRx = 0;
+
+			/// Number of times received data was too big for reassembly buffer
+			uint32_t numTransportBufferOverflow = 0;
+
+			/// number of times transport buffer is discard due to new FIR
+			uint32_t numTransportDiscard = 0;
+
+			/// number of segments ignored due to bad FIR/FIN or SEQ
+			uint32_t numTransportIgnore = 0;
+		};
+
+		struct Tx
+		{
+			/// Number of TPDUs transmitted
+			uint32_t numTransportTx = 0;
+		};
+
+		Transport() = default;
+		Transport(const Rx& rx, const Tx& tx) : rx(rx), tx(tx) {}
+
+		Rx rx;
+		Tx tx;
+	};
+
+	StackStatistics() = default;
+
+	StackStatistics(const Link& link, const Transport& transport) :
+		link(link),
+		transport(transport)
+	{
+
+	}
+
+	Link link;
+	Transport transport;
 };
+
 }
 
 #endif

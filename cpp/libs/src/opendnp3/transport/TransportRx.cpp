@@ -33,9 +33,8 @@ using namespace openpal;
 namespace opendnp3
 {
 
-TransportRx::TransportRx(const Logger& logger_, uint32_t maxRxFragSize, StackStatistics* pStatistics_) :
-	logger(logger_),
-	pStatistics(pStatistics_),
+TransportRx::TransportRx(const Logger& logger, uint32_t maxRxFragSize) :
+	logger(logger),
 	rxBuffer(maxRxFragSize),
 	numBytesRead(0)
 {
@@ -60,13 +59,14 @@ openpal::WSlice TransportRx::GetAvailable()
 
 RSlice TransportRx::ProcessReceive(const RSlice& input)
 {
+	++statistics.numTransportRx;
+
 	if (input.IsEmpty())
 	{
-		FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::WARN, TLERR_NO_HEADER, "Received tpdu with no header");
-		if (pStatistics) ++pStatistics->numTransportErrorRx;
+		FORMAT_LOG_BLOCK(logger, flags::WARN, "Received tpdu with no header");
+		++statistics.numTransportErrorRx;
 		return RSlice::Empty();
 	}
-
 
 	const uint8_t HDR = input[0];
 	const bool FIR = (HDR & TL_HDR_FIR) != 0;
@@ -75,14 +75,11 @@ RSlice TransportRx::ProcessReceive(const RSlice& input)
 
 	auto payload = input.Skip(1);
 
-	FORMAT_LOG_BLOCK(logger, flags::TRANSPORT_RX, "FIR: %d FIN: %d SEQ: %u LEN: %u", FIR, FIR, SEQ, payload.Size());
+	FORMAT_LOG_BLOCK(logger, flags::TRANSPORT_RX, "FIR: %d FIN: %d SEQ: %u LEN: %u", FIR, FIN, SEQ, payload.Size());
 
-	if (!this->ValidateHeader(FIR, FIR, SEQ))
+	if (!this->ValidateHeader(FIR, SEQ))
 	{
-		if (pStatistics)
-		{
-			++pStatistics->numTransportErrorRx;
-		}
+		++statistics.numTransportErrorRx;
 		return RSlice::Empty();
 	}
 
@@ -90,15 +87,10 @@ RSlice TransportRx::ProcessReceive(const RSlice& input)
 
 	if (payload.Size() > available.Size())
 	{
-		if (pStatistics) ++pStatistics->numTransportErrorRx;
-		SIMPLE_LOG_BLOCK_WITH_CODE(logger, flags::WARN, TLERR_BUFFER_FULL, "Exceeded the buffer size before a complete fragment was read");
+		++statistics.numTransportBufferOverflow;
+		SIMPLE_LOG_BLOCK(logger, flags::WARN, "Exceeded the buffer size before a complete fragment was read");
 		this->ClearRxBuffer();
 		return RSlice::Empty();
-	}
-
-	if (pStatistics)
-	{
-		++pStatistics->numTransportRx;
 	}
 
 	payload.CopyTo(available);
@@ -118,15 +110,16 @@ RSlice TransportRx::ProcessReceive(const RSlice& input)
 	}
 }
 
-bool TransportRx::ValidateHeader(bool fir, bool fin, uint8_t sequence_)
+bool TransportRx::ValidateHeader(bool fir, uint8_t sequence_)
 {
 	if(fir)
 	{
 		sequence = sequence_; //always accept the sequence on FIR
 		if (numBytesRead > 0)
 		{
+			++statistics.numTransportDiscard;
 			// drop existing received bytes from segment
-			SIMPLE_LOG_BLOCK_WITH_CODE(logger, flags::WARN, TLERR_NEW_FIR_MID_SEQUENCE, "FIR received mid-fragment, discarding previous bytes");
+			SIMPLE_LOG_BLOCK(logger, flags::WARN, "FIR received mid-fragment, discarding previous bytes");
 			numBytesRead = 0;
 		}
 		return true;
@@ -134,13 +127,15 @@ bool TransportRx::ValidateHeader(bool fir, bool fin, uint8_t sequence_)
 
 	if(numBytesRead == 0)   //non-first packet with 0 prior bytes
 	{
-		SIMPLE_LOG_BLOCK_WITH_CODE(logger, flags::WARN, TLERR_MESSAGE_WITHOUT_FIR, "non-FIR packet with 0 prior bytes");
+		++statistics.numTransportIgnore;
+		SIMPLE_LOG_BLOCK(logger, flags::WARN, "non-FIR packet with 0 prior bytes");
 		return false;
 	}
 
 	if(sequence_ != sequence)
 	{
-		FORMAT_LOG_BLOCK_WITH_CODE(logger, flags::WARN, TLERR_BAD_SEQUENCE, "Ignoring bad sequence, got %u, expected %u", sequence_, sequence.Get());
+		++statistics.numTransportIgnore;
+		FORMAT_LOG_BLOCK(logger, flags::WARN, "Ignoring bad sequence, got %u, expected %u", sequence_, sequence.Get());
 		return false;
 	}
 

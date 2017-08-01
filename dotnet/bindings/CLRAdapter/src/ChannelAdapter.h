@@ -20,16 +20,21 @@ namespace Automatak
 			{
 			public:
 
-				ChannelAdapter(asiodnp3::IChannel* pChannel_) : pChannel(pChannel_)
-				{}
+				ChannelAdapter(const std::shared_ptr<asiodnp3::IChannel>& channel) : channel(new std::shared_ptr<asiodnp3::IChannel>(channel))
+				{}			
+
+				~ChannelAdapter() { this ->!ChannelAdapter(); }
+
+				!ChannelAdapter()
+				{
+					delete channel;
+				}
 
 				virtual LogFilter GetLogFilters() sealed;
 
 				virtual IChannelStatistics^ GetChannelStatistics() sealed;
 
-				virtual void SetLogFilters(LogFilter filters) sealed;
-
-				virtual void AddStateListener(System::Action<ChannelState>^ listener) sealed;
+				virtual void SetLogFilters(LogFilter filters) sealed;				
 
 				virtual IMaster^ AddMaster(System::String^ loggerId, ISOEHandler^ publisher, IMasterApplication^ application, MasterStackConfig^ config) sealed;
 
@@ -39,46 +44,9 @@ namespace Automatak
 
 			private:
 
-				asiodnp3::IChannel* pChannel;				
+				std::shared_ptr<asiodnp3::IChannel>* channel;
 
-				static void ApplyDatabaseSettings(opendnp3::DatabaseConfigView view, DatabaseTemplate^ dbTemplate);
-
-				static void ApplySettings(IReadOnlyList<BinaryRecord^>^ list, openpal::ArrayView < opendnp3::Cell<opendnp3::Binary>, uint16_t>& view);
-
-				template <class Managed, class Native>
-				static void ApplyStaticVariation(IReadOnlyList<Managed^>^ list, openpal::ArrayView < opendnp3::Cell<Native>, uint16_t>& view)
-				{
-					for (int i = 0; i < view.Size(); ++i)
-					{
-						view[i].vIndex = list[i]->index;
-						view[i].variation = (typename Native::StaticVariation) list[i]->staticVariation;						
-					}
-				}
-
-				template <class Managed, class Native>
-				static void ApplyIndexClazzAndVariations(IReadOnlyList<Managed^>^ list, openpal::ArrayView < opendnp3::Cell<Native>, uint16_t>& view)
-				{
-					for (int i = 0; i < view.Size(); ++i)
-					{						
-						view[i].vIndex = list[i]->index;						
-						view[i].variation = (typename Native::StaticVariation) list[i]->staticVariation;
-						view[i].metadata.variation = (typename Native::EventVariation) list[i]->eventVariation;
-						view[i].metadata.clazz = (opendnp3::PointClass) list[i]->clazz;
-					}
-				}
-
-				template <class Managed, class Native>
-				static void ApplyIndexClazzDeadbandsAndVariations(IReadOnlyList<Managed^>^ list, openpal::ArrayView < opendnp3::Cell<Native>, uint16_t>& view)
-				{
-					for (int i = 0; i < view.Size(); ++i)
-					{
-						view[i].vIndex = list[i]->index;
-						view[i].variation = (typename Native::StaticVariation) list[i]->staticVariation;
-						view[i].metadata.variation = (typename Native::EventVariation) list[i]->eventVariation;
-						view[i].metadata.deadband = list[i]->deadband;
-						view[i].metadata.clazz = (opendnp3::PointClass) list[i]->clazz;
-					}
-				}
+				
 				
 			};
 

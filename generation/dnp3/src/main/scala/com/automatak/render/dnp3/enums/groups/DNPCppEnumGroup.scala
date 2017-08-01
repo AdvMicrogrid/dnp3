@@ -25,7 +25,11 @@ object DNPCppEnumGroup {
     CertificateType(),
     KeyChangeMethod(),
     UserOperation(),
-    UserRole()
+    UserRole(),
+    Parity(),
+    StopBits(),
+    FlowControl(),
+    FlagsType()
   ).map(x => EnumConfig(x, true, true))
 
   private def simpleEnums = (List(

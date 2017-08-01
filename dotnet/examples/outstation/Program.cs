@@ -33,14 +33,11 @@ namespace DotNetOutstationDemo
     {
         static int Main(string[] args)
         {
-            IDNP3Manager mgr = DNP3ManagerFactory.CreateManager(1, PrintingLogAdapter.Instance);
+            IDNP3Manager mgr = DNP3ManagerFactory.CreateManager(1, new PrintingLogAdapter());
             
-            var channel = mgr.AddTCPServer("server", LogLevels.NORMAL, ChannelRetry.Default, "0.0.0.0", 20000);
+            var channel = mgr.AddTCPServer("server", LogLevels.NORMAL, ChannelRetry.Default, "0.0.0.0", 20000, ChannelListener.Print());            
 
-            // Optional: add a listener for the channel state
-            channel.AddStateListener(state => Console.WriteLine("channel state: " + state));     
-
-            var config = new OutstationStackConfig();
+            var config = new OutstationStackConfig();            
 
             // configure the various measurements in our database
             config.databaseTemplate = new DatabaseTemplate(4, 1, 1, 1, 1, 1, 1, 0);
@@ -69,8 +66,6 @@ namespace DotNetOutstationDemo
                         {
                             binaryValue = !binaryValue;
                             ++analogValue;
-                            System.Console.WriteLine("Change Binary 0 to: " + binaryValue);
-                            System.Console.WriteLine("Change Analog 9 to: " + analogValue);
 
                             // create a changeset and load it 
                             var changeset = new ChangeSet();

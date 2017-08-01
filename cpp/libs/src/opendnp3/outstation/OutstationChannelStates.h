@@ -22,8 +22,6 @@
 #define OPENDNP3_OUTSTATIONCHANNEL_STATES_H
 
 #include "opendnp3/outstation/OutstationSeqNum.h"
-#include "opendnp3/outstation/OutstationSolicitedStates.h"
-#include "opendnp3/outstation/OutstationUnsolicitedStates.h"
 #include "opendnp3/app/TxBuffer.h"
 
 #include <openpal/util/Uncopyable.h>
@@ -35,22 +33,11 @@ class OutstationSolState : private openpal::Uncopyable
 {
 public:
 
-	OutstationSolState(uint32_t maxTxSize) :
-		pState(&OutstationSolicitedStateIdle::Inst()),
-		tx(maxTxSize)
+	OutstationSolState(uint32_t maxTxSize) : tx(maxTxSize)
 	{}
 
-	void Reset()
-	{
-		pState = &OutstationSolicitedStateIdle::Inst();
-	}
+	void Reset() {}
 
-	bool IsIdle() const
-	{
-		return pState == &OutstationSolicitedStateIdle::Inst();
-	};
-
-	OutstationSolicitedStateBase*	pState;
 	OutstationSeqNum seq;
 	TxBuffer tx;
 };
@@ -61,23 +48,15 @@ public:
 
 	OutstationUnsolState(uint32_t maxTxSize) :
 		completedNull(false),
-		pState(&OutstationUnsolicitedStateIdle::Inst()),
 		tx(maxTxSize)
 	{}
-
-	bool IsIdle() const
-	{
-		return pState == &OutstationUnsolicitedStateIdle::Inst();
-	};
 
 	void Reset()
 	{
 		completedNull = false;
-		pState = &OutstationUnsolicitedStateIdle::Inst();
 	}
 
 	bool completedNull;
-	OutstationUnsolicitedStateBase*	pState;
 	OutstationSeqNum seq;
 	TxBuffer tx;
 };

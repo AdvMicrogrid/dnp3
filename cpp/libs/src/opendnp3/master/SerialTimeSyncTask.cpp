@@ -53,7 +53,7 @@ bool SerialTimeSyncTask::BuildRequest(APDURequest& request, uint8_t seq)
 	{
 		auto now = pApplication->Now();
 		Group50Var1 time;
-		time.time = UInt48Type(now.msSinceEpoch + delay);
+		time.time = DNPTime(now.msSinceEpoch + delay);
 		request.SetFunction(FunctionCode::WRITE);
 		request.SetControl(AppControlField::Request(seq));
 		auto writer = request.GetWriter();
@@ -83,7 +83,7 @@ IMasterTask::ResponseResult SerialTimeSyncTask::OnResponseDelayMeas(const APDURe
 {
 	if (ValidateSingleResponse(response))
 	{
-		TimeSyncHandler handler(logger);
+		TimeSyncHandler handler;
 		auto result = APDUParser::Parse(objects, handler, &logger);
 		if (result == ParseResult::OK)
 		{

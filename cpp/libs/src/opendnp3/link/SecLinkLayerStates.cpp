@@ -20,12 +20,9 @@
  */
 #include "SecLinkLayerStates.h"
 
+#include "openpal/logging/LogMacros.h"
 
-#include <openpal/logging/LogMacros.h>
-
-#include "opendnp3/ErrorCodes.h"
 #include "opendnp3/link/LinkLayer.h"
-
 #include "opendnp3/LogLevels.h"
 
 using namespace openpal;
@@ -50,13 +47,15 @@ SLLS_NotReset SLLS_NotReset::instance;
 
 SecStateBase& SLLS_NotReset::OnTestLinkStatus(LinkContext& ctx, bool aFcb)
 {
-	SIMPLE_LOG_BLOCK_WITH_CODE(ctx.logger, flags::WARN, DLERR_UNEXPECTED_LPDU, "TestLinkStatus ignored");
+	++ctx.statistics.numUnexpectedFrame;
+	SIMPLE_LOG_BLOCK(ctx.logger, flags::WARN, "TestLinkStatus ignored");
 	return *this;
 }
 
 SecStateBase& SLLS_NotReset::OnConfirmedUserData(LinkContext& ctx, bool aFcb, const openpal::RSlice&)
 {
-	SIMPLE_LOG_BLOCK_WITH_CODE(ctx.logger, flags::WARN, DLERR_UNEXPECTED_LPDU, "ConfirmedUserData ignored");
+	++ctx.statistics.numUnexpectedFrame;
+	SIMPLE_LOG_BLOCK(ctx.logger, flags::WARN, "ConfirmedUserData ignored");
 	return *this;
 }
 

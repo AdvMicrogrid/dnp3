@@ -1,16 +1,8 @@
-#ifndef __MASTER_ADAPTER_H_
-#define __MASTER_ADAPTER_H_
+#ifndef OPENDNP3CLR_MASTER_ADAPTER_H
+#define OPENDNP3CLR_MASTER_ADAPTER_H
 
-using namespace System::Collections::ObjectModel;
-using namespace System::Collections::Generic;
-
-#include "MasterAdapterBase.h"
-
-#include "MasterConversions.h"
-
-#include "CallbackAdapters.h"
-
-#include <openpal/container/Buffer.h>
+#include "MasterOperationsAdapter.h"
+#include <asiodnp3/IMaster.h>
 
 using namespace Automatak::DNP3::Interface;
 
@@ -19,15 +11,29 @@ namespace Automatak
 	namespace DNP3
 	{
 		namespace Adapter
-		{		
-			private ref class MasterAdapter : public MasterAdapterBase, public IMaster
+		{			
+			private ref class MasterAdapter : MasterOperationsAdapter, IMaster
 			{
 			public:
 
-				MasterAdapter(asiodnp3::IMaster* apMaster) : MasterAdapterBase(apMaster)
-				{}
+				MasterAdapter(const std::shared_ptr<asiodnp3::IMaster>& master);
+
+				~MasterAdapter() { this ->!MasterAdapter(); }
+				!MasterAdapter();
 			
-			};			
+				virtual void Enable();
+
+				virtual void Disable();
+
+				virtual void Shutdown();
+
+				virtual Interface::IStackStatistics^ GetStackStatistics();
+				
+
+			private:				
+				
+				std::shared_ptr<asiodnp3::IMaster>* master;				
+			};
 
 		}
 	}

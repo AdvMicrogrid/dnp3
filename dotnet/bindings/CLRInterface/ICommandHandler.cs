@@ -33,12 +33,12 @@ namespace Automatak.DNP3.Interface
     public interface ICommandHandler
     {
         /// <summary>
-        /// Called when an ASDU containing commands begins
+        /// Called before any other method calls
         /// </summary>
         void Start();
 
         /// <summary>
-        /// Called when an ASDU containing commands is complete
+        /// Called after all other method calls
         /// </summary>
         void End();
 

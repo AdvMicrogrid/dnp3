@@ -31,26 +31,18 @@ class UInt48Type
 
 public:
 
-	explicit UInt48Type(uint64_t value) : representation(value)
+	explicit UInt48Type(int64_t value) : value(value)
 	{}
 
-	UInt48Type() : representation(0)
+	UInt48Type() : value(0)
 	{}
 
-	inline operator uint64_t() const
+	operator int64_t() const
 	{
-		return representation;
+		return value;
 	}
 
-	uint64_t Get() const
-	{
-		return representation;
-	}
-
-private:
-
-	uint64_t representation;
-
+	int64_t value;
 };
 
 }

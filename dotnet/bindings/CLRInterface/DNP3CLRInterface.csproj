@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Automatak.DNP3.Interface</RootNamespace>
     <AssemblyName>DNP3CLRInterface</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -69,6 +69,7 @@
     <Compile Include="config\StaticTypeBitfield.cs" />
     <Compile Include="Conversions.cs" />
     <Compile Include="config\EventBufferConfig.cs" />
+    <Compile Include="DefaultListenCallbacks.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="gen\AnalogQuality.cs" />
     <Compile Include="gen\AssignClassType.cs" />
@@ -89,6 +90,7 @@
     <Compile Include="gen\EventDoubleBinaryVariation.cs" />
     <Compile Include="gen\EventFrozenCounterVariation.cs" />
     <Compile Include="gen\EventMode.cs" />
+    <Compile Include="gen\FlowControl.cs" />
     <Compile Include="gen\FunctionCode.cs" />
     <Compile Include="gen\GroupVariation.cs" />
     <Compile Include="gen\IINField.cs" />
@@ -96,9 +98,11 @@
     <Compile Include="gen\IntervalUnits.cs" />
     <Compile Include="gen\KeyChangeMethod.cs" />
     <Compile Include="gen\KeyWrapAlgorithm.cs" />
+    <Compile Include="gen\LinkFunction.cs" />
     <Compile Include="gen\LinkStatus.cs" />
     <Compile Include="gen\MasterTaskType.cs" />
     <Compile Include="gen\OperateType.cs" />
+    <Compile Include="gen\Parity.cs" />
     <Compile Include="gen\PointClass.cs" />
     <Compile Include="gen\QualifierCode.cs" />
     <Compile Include="gen\RestartMode.cs" />
@@ -112,6 +116,7 @@
     <Compile Include="gen\StaticFrozenCounterVariation.cs" />
     <Compile Include="gen\StaticTimeAndIntervalVariation.cs" />
     <Compile Include="gen\StaticTypeBitmask.cs" />
+    <Compile Include="gen\StopBits.cs" />
     <Compile Include="gen\TaskCompletion.cs" />
     <Compile Include="gen\TimestampMode.cs" />
     <Compile Include="gen\TimeSyncMode.cs" />
@@ -119,6 +124,7 @@
     <Compile Include="gen\UserRole.cs" />
     <Compile Include="Header.cs" />
     <Compile Include="IChannel.cs" />
+    <Compile Include="IChannelListener.cs" />
     <Compile Include="IChannelStatistics.cs" />
     <Compile Include="ICommandHandler.cs">
       <SubType>Code</SubType>
@@ -131,6 +137,8 @@
     </Compile>
     <Compile Include="IDNP3Manager.cs" />
     <Compile Include="ILinkListener.cs" />
+    <Compile Include="IListenCallbacks.cs" />
+    <Compile Include="IListener.cs" />
     <Compile Include="ILogHandler.cs" />
     <Compile Include="IMaster.cs">
       <SubType>Code</SubType>
@@ -138,10 +146,14 @@
     <Compile Include="IMasterApplication.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="IMasterOperations.cs" />
+    <Compile Include="IMasterSession.cs" />
     <Compile Include="IOutstationApplication.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="IPEndpoint.cs" />
     <Compile Include="IQualityBitInfo.cs" />
+    <Compile Include="ISessionAcceptor.cs" />
     <Compile Include="ISOEHandler.cs" />
     <Compile Include="IOutstation.cs" />
     <Compile Include="IStack.cs">
@@ -151,6 +163,7 @@
     <Compile Include="IMasterScan.cs" />
     <Compile Include="config\LinkConfig.cs" />
     <Compile Include="ITaskCallback.cs" />
+    <Compile Include="LinkHeader.cs" />
     <Compile Include="LogLevels.cs" />
     <Compile Include="config\MasterConfig.cs" />
     <Compile Include="config\MasterStackConfig.cs" />
@@ -174,6 +187,7 @@
     </Compile>
     <Compile Include="TaskInfo.cs" />
     <Compile Include="TLSConfig.cs" />
+    <Compile Include="X509Info.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

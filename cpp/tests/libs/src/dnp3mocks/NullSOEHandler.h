@@ -23,6 +23,8 @@
 
 #include <opendnp3/master/ISOEHandler.h>
 
+#include <memory>
+
 namespace opendnp3
 {
 
@@ -31,9 +33,11 @@ class NullSOEHandler : public ISOEHandler
 
 public:
 
-	static ISOEHandler& Instance()
+	NullSOEHandler() = default;
+
+	static std::shared_ptr<ISOEHandler> Create()
 	{
-		return instance;
+		return std::make_shared<NullSOEHandler>();
 	}
 
 	virtual void Process(const HeaderInfo& info, const ICollection<Indexed<Binary>>& values) override final {}
@@ -48,6 +52,7 @@ public:
 	virtual void Process(const HeaderInfo& info, const ICollection<Indexed<BinaryCommandEvent>>& values) override final {}
 	virtual void Process(const HeaderInfo& info, const ICollection<Indexed<AnalogCommandEvent>>& values) override final {}
 	virtual void Process(const HeaderInfo& info, const ICollection<Indexed<SecurityStat>>& values) override final {}
+	virtual void Process(const HeaderInfo& info, const ICollection<DNPTime>& values) override final {}
 
 protected:
 
@@ -55,8 +60,7 @@ protected:
 	void End() override final {}
 
 private:
-	NullSOEHandler()
-	{}
+
 
 	static NullSOEHandler instance;
 };

@@ -12,44 +12,50 @@ namespace Automatak
 		namespace Adapter
 		{
 
-			OutstationAdapter::OutstationAdapter(asiodnp3::IOutstation* pOutstation_) : pOutstation(pOutstation_)				
+			OutstationAdapter::OutstationAdapter(const std::shared_ptr<asiodnp3::IOutstation>& outstation) : 
+				outstation(new std::shared_ptr<asiodnp3::IOutstation>(outstation))
 			{}
 
-			void OutstationAdapter::SetLogFilters(LogFilter filters)
+			OutstationAdapter::!OutstationAdapter()
 			{
-				pOutstation->SetLogFilters(filters.Flags);
+				delete outstation;
+			}
+
+			void OutstationAdapter::SetLogFilters(LogFilter filters)
+			{				
+				(*outstation)->SetLogFilters(filters.Flags);
 			}
 
 			void OutstationAdapter::Load(IChangeSet^ changes)
 			{
-				auto adapter = gcnew ChangeSetAdapter(*pOutstation);
+				auto adapter = gcnew ChangeSetAdapter();
 				changes->Apply(adapter);
-				adapter->Apply();
+				adapter->Apply(**outstation);
 			}			
 
 			void OutstationAdapter::SetRestartIIN()
 			{
-				pOutstation->SetRestartIIN();
+				(*outstation)->SetRestartIIN();
 			}
 
 			void OutstationAdapter::Shutdown()
 			{
-				pOutstation->Shutdown();
+				(*outstation)->Shutdown();
 			}
 
 			void OutstationAdapter::Enable()
 			{
-				pOutstation->Enable();
+				(*outstation)->Enable();
 			}
 
 			void OutstationAdapter::Disable()
 			{
-				pOutstation->Disable();
+				(*outstation)->Disable();
 			}
 
 			IStackStatistics^ OutstationAdapter::GetStackStatistics()
 			{
-				auto stats = pOutstation->GetStackStatistics();
+				auto stats = (*outstation)->GetStackStatistics();
 				return Conversions::ConvertStackStats(stats);
 			}
 

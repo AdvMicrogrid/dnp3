@@ -28,7 +28,6 @@
 #include "opendnp3/outstation/SOERecord.h"
 #include "opendnp3/outstation/IEventRecorder.h"
 
-
 namespace opendnp3
 {
 
@@ -72,12 +71,12 @@ private:
 		return record.selected && !record.written;
 	}
 
-	template <class T>
-	static Result WriteTypeWithSerializer(HeaderWriter& writer, IEventRecorder& recorder, openpal::ListNode<SOERecord>* pLocation, opendnp3::DNP3Serializer<T> serializer, typename T::EventVariation variation)
+	template <class Spec>
+	static Result WriteTypeWithSerializer(HeaderWriter& writer, IEventRecorder& recorder, openpal::ListNode<SOERecord>* pLocation, opendnp3::DNP3Serializer<typename Spec::meas_t> serializer, typename Spec::event_variation_t variation)
 	{
 		auto iter = openpal::LinkedListIterator<SOERecord>::From(pLocation);
 
-		auto header = writer.IterateOverCountWithPrefix<openpal::UInt16, T>(QualifierCode::UINT16_CNT_UINT16_INDEX, serializer);
+		auto header = writer.IterateOverCountWithPrefix<openpal::UInt16, typename Spec::meas_t>(QualifierCode::UINT16_CNT_UINT16_INDEX, serializer);
 
 		openpal::ListNode<SOERecord>* pCurrent = nullptr;
 
@@ -87,9 +86,9 @@ private:
 
 			if (IsWritable(record))
 			{
-				if ((record.type == T::EventTypeEnum) && (record.GetValue<T>().selectedVariation == variation))
+				if ((record.type == Spec::EventTypeEnum) && (record.GetValue<Spec>().selectedVariation == variation))
 				{
-					auto evt = record.ReadEvent<T>();
+					auto evt = record.ReadEvent<Spec>();
 					if (header.Write(evt.value, evt.index))
 					{
 						record.written = true;
@@ -114,15 +113,15 @@ private:
 		return Result(false, location);
 	}
 
-	template <class T, class CTOType>
-	static Result WriteCTOTypeWithSerializer(HeaderWriter& writer, IEventRecorder& recorder, openpal::ListNode<SOERecord>* pLocation, opendnp3::DNP3Serializer<T> serializer, typename T::EventVariation variation)
+	template <class Spec, class CTOType>
+	static Result WriteCTOTypeWithSerializer(HeaderWriter& writer, IEventRecorder& recorder, openpal::ListNode<SOERecord>* pLocation, opendnp3::DNP3Serializer<typename Spec::meas_t> serializer, typename Spec::event_variation_t variation)
 	{
 		auto iter = openpal::LinkedListIterator<SOERecord>::From(pLocation);
 
 		CTOType cto;
 		cto.time = pLocation->value.GetTime();
 
-		auto header = writer.IterateOverCountWithPrefixAndCTO<openpal::UInt16, T, CTOType>(QualifierCode::UINT16_CNT_UINT16_INDEX, serializer, cto);
+		auto header = writer.IterateOverCountWithPrefixAndCTO<openpal::UInt16, typename Spec::meas_t, CTOType>(QualifierCode::UINT16_CNT_UINT16_INDEX, serializer, cto);
 
 		openpal::ListNode<SOERecord>* pCurrent = nullptr;
 
@@ -132,7 +131,7 @@ private:
 
 			if (IsWritable(record))
 			{
-				if ((record.type == T::EventTypeEnum) && (record.GetValue<T>().selectedVariation == variation))
+				if ((record.type == Spec::EventTypeEnum) && (record.GetValue<Spec>().selectedVariation == variation))
 				{
 					if (record.GetTime() < cto.time)
 					{
@@ -149,7 +148,7 @@ private:
 						}
 						else
 						{
-							auto evt = record.ReadEvent<T>();
+							auto evt = record.ReadEvent<Spec>();
 							evt.value.time = DNPTime(diff);
 							if (header.Write(evt.value, evt.index))
 							{

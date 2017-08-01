@@ -26,8 +26,6 @@ using namespace opendnp3;
 namespace asiodnp3
 {
 
-PrintingSOEHandler PrintingSOEHandler::instance;
-
 void PrintingSOEHandler::Process(const HeaderInfo& info, const ICollection<Indexed<Binary>>& values)
 {
 	return PrintAll(info, values);
@@ -130,36 +128,14 @@ void PrintingSOEHandler::Process(const HeaderInfo& info, const ICollection<Index
 	values.ForeachItem(print);
 }
 
-
-/*
-
-void PrintingSOEHandler::OnValue(const HeaderInfo& info, const BinaryCommandEvent& meas, uint16_t index)
+void PrintingSOEHandler::Process(const opendnp3::HeaderInfo& info, const opendnp3::ICollection<opendnp3::DNPTime>& values)
 {
-	std::cout << "BinaryCommandEvent: " <<
-		"[" << index << "] : " <<
-		meas.time << " : " <<
-		meas.value << " : " <<
-		CommandStatusToString(meas.status) << std::endl;
-}
+	auto print = [](const DNPTime & value)
+	{
+		std::cout << "DNPTime: " << value.value << std::endl;
+	};
 
-void PrintingSOEHandler::OnValue(const HeaderInfo& info, const AnalogCommandEvent& meas, uint16_t index)
-{
-	std::cout << "AnalogCommandEvent: " <<
-		"[" << index << "] : " <<
-		meas.time << " : " <<
-		meas.value << " : " <<
-		CommandStatusToString(meas.status) << std::endl;
+	values.ForeachItem(print);
 }
-
-void PrintingSOEHandler::OnValue(const HeaderInfo& info, const SecurityStat& meas, uint16_t index)
-{
-	std::cout << "SecurityStat: " <<
-		"[" << index << "] : " <<
-		meas.time << " : " <<
-		meas.count << " : " <<
-		static_cast<int>(meas.quality) << " : " <<
-		meas.assocId << std::endl;
-}
-*/
 
 }

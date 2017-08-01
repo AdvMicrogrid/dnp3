@@ -23,37 +23,42 @@
 #include "opendnp3/link/PriLinkLayerStates.h"
 #include "opendnp3/link/SecLinkLayerStates.h"
 #include "opendnp3/link/LinkFrame.h"
-#include "opendnp3/link/ILinkRouter.h"
+#include "opendnp3/link/ILinkTx.h"
 
-#include "opendnp3/ErrorCodes.h"
-
+#include "openpal/util/Limits.h"
 
 using namespace openpal;
 
 namespace opendnp3
 {
 
-LinkContext::LinkContext(openpal::Logger logger, openpal::IExecutor& executor, IUpperLayer& upper, opendnp3::ILinkListener& linkListener, ILinkSession& session, const LinkConfig& config_) :
+LinkContext::LinkContext(
+    const openpal::Logger& logger,
+    const std::shared_ptr<openpal::IExecutor>& executor,
+    const std::shared_ptr<IUpperLayer>& upper,
+    const std::shared_ptr<opendnp3::ILinkListener>& listener,
+    ILinkSession& session,
+    const LinkConfig& config)
+	:
 	logger(logger),
-	config(config_),
+	config(config),
 	pSegments(nullptr),
 	txMode(LinkTransmitMode::Idle),
 	numRetryRemaining(0),
-	pExecutor(&executor),
-	rspTimeoutTimer(executor),
-	keepAliveTimer(executor),
+	executor(executor),
+	rspTimeoutTimer(*executor),
+	keepAliveTimer(*executor),
 	nextReadFCB(false),
 	nextWriteFCB(false),
 	isOnline(false),
 	isRemoteReset(false),
 	keepAliveTimeout(false),
-	lastMessageTimestamp(executor.GetTime()),
-	pRouter(nullptr),
+	lastMessageTimestamp(executor->GetTime()),
 	pPriState(&PLLS_Idle::Instance()),
 	pSecState(&SLLS_NotReset::Instance()),
-	pListener(&linkListener),
-	pSession(&session),
-	pUpperLayer(&upper)
+	listener(listener),
+	upper(upper),
+	pSession(&session)
 {}
 
 bool LinkContext::OnLowerLayerUp()
@@ -64,19 +69,16 @@ bool LinkContext::OnLowerLayerUp()
 		return false;
 	}
 
+	const auto now = this->executor->GetTime();
+
 	this->isOnline = true;
 
-	auto now = this->pExecutor->GetTime();
 	this->lastMessageTimestamp = now; // no reason to trigger a keep-alive until we've actually expired
-	MonotonicTimestamp expiration(now.milliseconds + config.KeepAliveTimeout.GetMilliseconds());
-	this->StartKeepAliveTimer(MonotonicTimestamp(now.milliseconds + config.KeepAliveTimeout.GetMilliseconds()));
 
-	this->PostStatusCallback(opendnp3::LinkStatus::UNRESET);
+	this->StartKeepAliveTimer(now.Add(config.KeepAliveTimeout));
 
-	if (pUpperLayer)
-	{
-		this->pUpperLayer->OnLowerLayerUp();
-	}
+	listener->OnStateChange(opendnp3::LinkStatus::UNRESET);
+	upper->OnLowerLayerUp();
 
 	return true;
 }
@@ -103,12 +105,8 @@ bool LinkContext::OnLowerLayerDown()
 	pPriState = &PLLS_Idle::Instance();
 	pSecState = &SLLS_NotReset::Instance();
 
-	this->PostStatusCallback(opendnp3::LinkStatus::UNRESET);
-
-	if (pUpperLayer)
-	{
-		this->pUpperLayer->OnLowerLayerDown();
-	}
+	listener->OnStateChange(opendnp3::LinkStatus::UNRESET);
+	upper->OnLowerLayerDown();
 
 	return true;
 }
@@ -180,7 +178,7 @@ void LinkContext::QueueTransmit(const RSlice& buffer, bool primary)
 	if (txMode == LinkTransmitMode::Idle)
 	{
 		txMode = primary ? LinkTransmitMode::Primary : LinkTransmitMode::Secondary;
-		pRouter->BeginTransmit(buffer, pSession);
+		linktx->BeginTransmit(buffer, *pSession);
 	}
 	else
 	{
@@ -247,35 +245,20 @@ bool LinkContext::Retry()
 
 void LinkContext::PushDataUp(const openpal::RSlice& data)
 {
-	if (pUpperLayer)
-	{
-		pUpperLayer->OnReceive(data);
-	}
-}
-
-void LinkContext::PostStatusCallback(opendnp3::LinkStatus status)
-{
-	auto callback = [this, status]()
-	{
-		this->pListener->OnStateChange(status);
-	};
-
-	pExecutor->PostLambda(callback);
+	upper->OnReceive(data);
 }
 
 void LinkContext::CompleteSendOperation(bool success)
 {
 	this->pSegments = nullptr;
 
-	if (pUpperLayer)
+	auto callback = [upper = upper, success]()
 	{
-		auto callback = [this, success]()
-		{
-			this->pUpperLayer->OnSendResult(success);
-		};
+		upper->OnSendResult(success);
+	};
 
-		pExecutor->PostLambda(callback);
-	}
+	this->executor->Post(callback);
+
 }
 
 void LinkContext::TryStartTransmission()
@@ -293,7 +276,7 @@ void LinkContext::TryStartTransmission()
 
 void LinkContext::OnKeepAliveTimeout()
 {
-	auto now = this->pExecutor->GetTime();
+	const auto now = this->executor->GetTime();
 
 	auto elapsed = now.milliseconds - this->lastMessageTimestamp.milliseconds;
 
@@ -303,9 +286,7 @@ void LinkContext::OnKeepAliveTimeout()
 		this->keepAliveTimeout = true;
 	}
 
-	// No matter what, reschedule the timer based on last message timestamp
-	MonotonicTimestamp expiration(this->lastMessageTimestamp.milliseconds + config.KeepAliveTimeout);
-	this->StartKeepAliveTimer(expiration);
+	this->StartKeepAliveTimer(now.Add(config.KeepAliveTimeout));
 
 	this->TryStartTransmission();
 }
@@ -330,10 +311,12 @@ void LinkContext::StartResponseTimer()
 
 void LinkContext::StartKeepAliveTimer(const MonotonicTimestamp& expiration)
 {
-	this->keepAliveTimer.Start(expiration, [this]()
+	auto callback = [this]()
 	{
 		this->OnKeepAliveTimeout();
-	});
+	};
+
+	this->keepAliveTimer.Start(expiration, callback);
 }
 
 void LinkContext::CancelTimer()
@@ -345,13 +328,13 @@ void LinkContext::FailKeepAlive(bool timeout)
 {
 	if (timeout)
 	{
-		this->pListener->OnKeepAliveFailure();
+		this->listener->OnKeepAliveFailure();
 	}
 }
 
 void LinkContext::CompleteKeepAlive()
 {
-	this->pListener->OnKeepAliveSuccess();
+	this->listener->OnKeepAliveSuccess();
 }
 
 bool LinkContext::OnFrame(const LinkHeaderFields& header, const openpal::RSlice& userdata)
@@ -368,7 +351,7 @@ bool LinkContext::OnFrame(const LinkHeaderFields& header, const openpal::RSlice&
 	}
 
 	// reset the keep-alive timestamp
-	this->lastMessageTimestamp = this->pExecutor->GetTime();
+	this->lastMessageTimestamp = this->executor->GetTime();
 
 	switch (header.func)
 	{
@@ -408,21 +391,22 @@ bool LinkContext::Validate(bool isMaster, uint16_t src, uint16_t dest)
 {
 	if (isMaster == config.IsMaster)
 	{
-		SIMPLE_LOG_BLOCK_WITH_CODE(logger, flags::WARN, DLERR_WRONG_MASTER_BIT,
-		                           (isMaster ? "Master frame received for master" : "Outstation frame received for outstation"));
-
+		++statistics.numBadMasterBit;
+		SIMPLE_LOG_BLOCK(logger, flags::WARN, (isMaster ? "Master frame received for master" : "Outstation frame received for outstation"));
 		return false;
 	}
 
 	if (dest != config.LocalAddr)
 	{
-		SIMPLE_LOG_BLOCK_WITH_CODE(logger, flags::WARN, DLERR_UNKNOWN_DESTINATION, "Frame for unknown destintation");
+		++statistics.numUnknownDestination;
+		SIMPLE_LOG_BLOCK(logger, flags::WARN, "Frame for unknown destintation");
 		return false;
 	}
 
 	if (src != config.RemoteAddr)
 	{
-		SIMPLE_LOG_BLOCK_WITH_CODE(logger, flags::WARN, DLERR_UNKNOWN_SOURCE, "Frame from unknwon source");
+		++statistics.numUnknownSource;
+		SIMPLE_LOG_BLOCK(logger, flags::WARN, "Frame from unknwon source");
 		return false;
 	}
 
@@ -434,7 +418,7 @@ bool LinkContext::TryPendingTx(openpal::Settable<RSlice>& pending, bool primary)
 {
 	if (this->txMode == LinkTransmitMode::Idle && pending.IsSet())
 	{
-		this->pRouter->BeginTransmit(pending.Get(), pSession);
+		this->linktx->BeginTransmit(pending.Get(), *pSession);
 		pending.Clear();
 		this->txMode = primary ? LinkTransmitMode::Primary : LinkTransmitMode::Secondary;
 		return true;
@@ -442,8 +426,6 @@ bool LinkContext::TryPendingTx(openpal::Settable<RSlice>& pending, bool primary)
 
 	return false;
 }
-
-
 
 }
 

@@ -23,6 +23,8 @@
 
 #include <opendnp3/master/IMasterApplication.h>
 
+#include <memory>
+
 namespace asiodnp3
 {
 
@@ -30,7 +32,12 @@ class DefaultMasterApplication : public opendnp3::IMasterApplication
 {
 public:
 
-	static IMasterApplication& Instance();
+	DefaultMasterApplication() {}
+
+	static std::shared_ptr<IMasterApplication> Create()
+	{
+		return std::make_shared<DefaultMasterApplication>();
+	}
 
 	virtual void OnReceiveIIN(const opendnp3::IINField& iin) override final {}
 
@@ -49,10 +56,6 @@ public:
 
 	virtual void OnStateChange(opendnp3::LinkStatus value) override final {}
 
-private:
-	DefaultMasterApplication() {}
-
-	static DefaultMasterApplication instance;
 };
 
 }

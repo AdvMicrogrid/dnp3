@@ -20,13 +20,14 @@
  */
 #include <asiodnp3/DNP3Manager.h>
 #include <asiodnp3/PrintingSOEHandler.h>
+#include <asiodnp3/PrintingChannelListener.h>
 #include <asiodnp3/ConsoleLogger.h>
-#include <asiodnp3/MeasUpdate.h>
+#include <asiodnp3/UpdateBuilder.h>
 
 #include <asiopal/UTCTimeSource.h>
 #include <opendnp3/outstation/SimpleCommandHandler.h>
 
-#include <opendnp3/outstation/Database.h>
+#include <opendnp3/outstation/IUpdateHandler.h>
 
 #include <opendnp3/LogLevels.h>
 
@@ -40,13 +41,25 @@ using namespace openpal;
 using namespace asiopal;
 using namespace asiodnp3;
 
-void ConfigureDatabase(DatabaseConfigView view)
+void ConfigureDatabase(DatabaseConfig& config)
 {
 	// example of configuring analog index 0 for Class2 with floating point variations by default
-	view.analogs[0].variation = StaticAnalogVariation::Group30Var5;
-	view.analogs[0].metadata.clazz = PointClass::Class2;
-	view.analogs[0].metadata.variation = EventAnalogVariation::Group32Var7;
+	config.analog[0].clazz = PointClass::Class2;
+	config.analog[0].svariation = StaticAnalogVariation::Group30Var5;
+	config.analog[0].evariation = EventAnalogVariation::Group32Var7;
 }
+
+struct State
+{
+	uint32_t count = 0;
+	double value = 0;
+	bool binary = false;
+	DoubleBit dbit = DoubleBit::DETERMINED_OFF;
+};
+
+void AddUpdates(UpdateBuilder& builder, State& state, const std::string& arguments);
+
+
 
 int main(int argc, char* argv[])
 {
@@ -61,119 +74,93 @@ int main(int argc, char* argv[])
 	DNP3Manager manager(1, ConsoleLogger::Create());
 
 	// Create a TCP server (listener)
-	auto channel = manager.AddTCPServer("server", FILTERS, ChannelRetry::Default(), "0.0.0.0", 20000);
-
-	// Optionally, you can bind listeners to the channel to get state change notifications
-	// This listener just prints the changes to the console
-	channel->AddStateListener([](ChannelState state)
-	{
-		std::cout << "channel state: " << ChannelStateToString(state) << std::endl;
-	});
+	auto channel = manager.AddTCPServer("server", FILTERS, ChannelRetry::Default(), "0.0.0.0", 20000, PrintingChannelListener::Create());
 
 	// The main object for a outstation. The defaults are useable,
 	// but understanding the options are important.
-	OutstationStackConfig stackConfig;
+	OutstationStackConfig config(DatabaseSizes::AllTypes(10));
 
-	// You must specify the shape of your database and the size of the event buffers
-	stackConfig.dbTemplate = DatabaseTemplate::AllTypes(10);
-	stackConfig.outstation.eventBufferConfig = EventBufferConfig::AllTypes(10);
+	// Specify the maximum size of the event buffers
+	config.outstation.eventBufferConfig = EventBufferConfig::AllTypes(10);
 
 	// you can override an default outstation parameters here
 	// in this example, we've enabled the oustation to use unsolicted reporting
 	// if the master enables it
-	stackConfig.outstation.params.allowUnsolicited = true;
+	config.outstation.params.allowUnsolicited = true;
 
 	// You can override the default link layer settings here
 	// in this example we've changed the default link layer addressing
-	stackConfig.link.LocalAddr = 10;
-	stackConfig.link.RemoteAddr = 1;
+	config.link.LocalAddr = 10;
+	config.link.RemoteAddr = 1;
+
+	config.link.KeepAliveTimeout = openpal::TimeDuration::Max();
+
+	// You can optionally change the default reporting variations or class assignment prior to enabling the outstation
+	ConfigureDatabase(config.dbConfig);
 
 	// Create a new outstation with a log level, command handler, and
 	// config info this	returns a thread-safe interface used for
 	// updating the outstation's database.
-	auto outstation = channel->AddOutstation("outstation", SuccessCommandHandler::Instance(), DefaultOutstationApplication::Instance(), stackConfig);
-
-	// You can optionally change the default reporting variations or class assignment prior to enabling the outstation
-	ConfigureDatabase(outstation->GetConfigView());
+	auto outstation = channel->AddOutstation("outstation", SuccessCommandHandler::Create(), DefaultOutstationApplication::Create(), config);
 
 	// Enable the outstation and start communications
 	outstation->Enable();
 
 	// variables used in example loop
 	string input;
-	uint32_t count = 0;
-	double value = 0;
-	bool binary = false;
-	DoubleBit dbit = DoubleBit::DETERMINED_OFF;
-	bool channelCommsLoggingEnabled = true;
-	bool outstationCommsLoggingEnabled = true;
+	State state;
 
 	while (true)
 	{
 		std::cout << "Enter one or more measurement changes then press <enter>" << std::endl;
-		std::cout << "c = counter, b = binary, d = doublebit, a = analog, x = exit" << std::endl;
+		std::cout << "c = counter, b = binary, d = doublebit, a = analog, 'quit' = exit" << std::endl;
 		std::cin >> input;
 
-		for (char & c : input)
+		if (input == "quit") return 0; // DNP3Manager destructor cleanups up everything automatically
+		else
 		{
-			switch (c)
-			{
-			case('c') :
-				{
-					MeasUpdate tx(outstation, UTCTimeSource::Instance().Now());
-					tx.Update(Counter(count), 0);
-					++count;
-					break;
-				}
-			case('a') :
-				{
-					MeasUpdate tx(outstation, UTCTimeSource::Instance().Now());
-					tx.Update(Analog(value), 0);
-					value += 1;
-					break;
-				}
-			case('b') :
-				{
-					MeasUpdate tx(outstation, UTCTimeSource::Instance().Now());
-					tx.Update(Binary(binary), 0);
-					binary = !binary;
-					break;
-				}
-			case('d') :
-				{
-					MeasUpdate tx(outstation, UTCTimeSource::Instance().Now());
-					tx.Update(DoubleBitBinary(dbit), 0);
-					dbit = (dbit == DoubleBit::DETERMINED_OFF) ? DoubleBit::DETERMINED_ON : DoubleBit::DETERMINED_OFF;
-					break;
-				}
-			case('t') :
-				{
-					channelCommsLoggingEnabled = !channelCommsLoggingEnabled;
-					auto levels = channelCommsLoggingEnabled ? levels::ALL_COMMS : levels::NORMAL;
-					channel->SetLogFilters(levels);
-					std::cout << "Channel logging set to: " << levels << std::endl;
-					break;
-				}
-			case('u') :
-				{
-					outstationCommsLoggingEnabled = !outstationCommsLoggingEnabled;
-					auto levels = outstationCommsLoggingEnabled ? levels::ALL_COMMS : levels::NORMAL;
-					outstation->SetLogFilters(levels);
-					std::cout << "Outstation logging set to: " << levels << std::endl;
-					break;
-				}
-			case('x') :
-
-				// DNP3Manager destructor cleanups up everything automagically
-				return 0;
-
-			default:
-				std::cout << "No action registered for: " << c << std::endl;
-				break;
-			}
+			// update measurement values based on input string
+			UpdateBuilder builder;
+			AddUpdates(builder, state, input);
+			outstation->Apply(builder.Build());
 		}
-
 	}
 
 	return 0;
+}
+
+void AddUpdates(UpdateBuilder& builder, State& state, const std::string& arguments)
+{
+	for (const char& c : arguments)
+	{
+		switch (c)
+		{
+		case('c'):
+			{
+				builder.Update(Counter(state.count), 0);
+				++state.count;
+				break;
+			}
+		case('a'):
+			{
+				builder.Update(Analog(state.value), 0);
+				state.value += 1;
+				break;
+			}
+		case('b'):
+			{
+				builder.Update(Binary(state.binary), 0);
+				state.binary = !state.binary;
+				break;
+			}
+		case('d'):
+			{
+				builder.Update(DoubleBitBinary(state.dbit), 0);
+				state.dbit = (state.dbit == DoubleBit::DETERMINED_OFF) ? DoubleBit::DETERMINED_ON : DoubleBit::DETERMINED_OFF;
+				break;
+			}
+		default:
+			break;
+		}
+	}
 }

@@ -20,10 +20,8 @@
  */
 #include "PriLinkLayerStates.h"
 
-
 #include <openpal/logging/LogMacros.h>
 
-#include "opendnp3/ErrorCodes.h"
 #include "opendnp3/link/LinkLayer.h"
 #include "opendnp3/LogLevels.h"
 
@@ -38,25 +36,29 @@ namespace opendnp3
 
 PriStateBase& PriStateBase::OnAck(LinkContext& ctx, bool rxBuffFull)
 {
-	SIMPLE_LOG_BLOCK_WITH_CODE(ctx.logger, flags::WARN, DLERR_UNEXPECTED_LPDU, "Frame context not understood");
+	++ctx.statistics.numUnexpectedFrame;
+	SIMPLE_LOG_BLOCK(ctx.logger, flags::WARN, "Frame context not understood");
 	return *this;
 }
 
 PriStateBase& PriStateBase::OnNack(LinkContext& ctx, bool rxBuffFull)
 {
-	SIMPLE_LOG_BLOCK_WITH_CODE(ctx.logger, flags::WARN, DLERR_UNEXPECTED_LPDU, "Frame context not understood");
+	++ctx.statistics.numUnexpectedFrame;
+	SIMPLE_LOG_BLOCK(ctx.logger, flags::WARN, "Frame context not understood");
 	return *this;
 }
 
 PriStateBase& PriStateBase::OnLinkStatus(LinkContext& ctx, bool rxBuffFull)
 {
-	SIMPLE_LOG_BLOCK_WITH_CODE(ctx.logger, flags::WARN, DLERR_UNEXPECTED_LPDU, "Frame context not understood");
+	++ctx.statistics.numUnexpectedFrame;
+	SIMPLE_LOG_BLOCK(ctx.logger, flags::WARN, "Frame context not understood");
 	return *this;
 }
 
 PriStateBase& PriStateBase::OnNotSupported(LinkContext& ctx, bool rxBuffFull)
 {
-	SIMPLE_LOG_BLOCK_WITH_CODE(ctx.logger, flags::WARN, DLERR_UNEXPECTED_LPDU, "Frame context not understood");
+	++ctx.statistics.numUnexpectedFrame;
+	SIMPLE_LOG_BLOCK(ctx.logger, flags::WARN, "Frame context not understood");
 	return *this;
 }
 
@@ -122,7 +124,7 @@ PriStateBase& PLLS_Idle::TrySendRequestLinkStatus(LinkContext& ctx)
 {
 	ctx.keepAliveTimeout = false;
 	ctx.QueueRequestLinkStatus();
-	ctx.pListener->OnKeepAliveInitiated();
+	ctx.listener->OnKeepAliveInitiated();
 	return PLLS_RequestLinkStatusTransmitWait::Instance();
 }
 
@@ -225,7 +227,7 @@ PriStateBase& PLLS_ResetLinkWait::OnAck(LinkContext& ctx, bool rxBuffFull)
 	ctx.CancelTimer();
 	auto buffer = ctx.FormatPrimaryBufferWithConfirmed(ctx.pSegments->GetSegment(), ctx.nextWriteFCB);
 	ctx.QueueTransmit(buffer, true);
-	ctx.PostStatusCallback(opendnp3::LinkStatus::RESET);
+	ctx.listener->OnStateChange(opendnp3::LinkStatus::RESET);
 	return PLLS_ConfUserDataTransmitWait::Instance();
 }
 
@@ -278,7 +280,7 @@ PriStateBase& PLLS_ConfDataWait::OnAck(LinkContext& ctx, bool rxBuffFull)
 
 PriStateBase& PLLS_ConfDataWait::OnNack(LinkContext& ctx, bool rxBuffFull)
 {
-	ctx.PostStatusCallback(opendnp3::LinkStatus::UNRESET);
+	ctx.listener->OnStateChange(opendnp3::LinkStatus::UNRESET);
 
 	if (rxBuffFull)
 	{
@@ -313,7 +315,7 @@ PriStateBase& PLLS_ConfDataWait::OnTimeout(LinkContext& ctx)
 	else
 	{
 		SIMPLE_LOG_BLOCK(ctx.logger, flags::WARN, "Confirmed data final timeout, no retries remain");
-		ctx.PostStatusCallback(opendnp3::LinkStatus::UNRESET);
+		ctx.listener->OnStateChange(opendnp3::LinkStatus::UNRESET);
 		ctx.CompleteSendOperation(false);
 		return PLLS_Idle::Instance();
 	}

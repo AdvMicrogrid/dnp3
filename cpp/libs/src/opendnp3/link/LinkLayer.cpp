@@ -25,26 +25,35 @@ using namespace openpal;
 namespace opendnp3
 {
 
-LinkLayer::LinkLayer(openpal::Logger logger, openpal::IExecutor& executor, IUpperLayer& upper, opendnp3::ILinkListener& listener, const LinkConfig& config) :
+LinkLayer::LinkLayer(const openpal::Logger& logger, const std::shared_ptr<openpal::IExecutor>& executor, const std::shared_ptr<IUpperLayer>& upper, const std::shared_ptr<opendnp3::ILinkListener>& listener, const LinkConfig& config) :
 	ctx(logger, executor, upper, listener, *this, config)
 {}
 
-void LinkLayer::SetRouter(ILinkRouter& router)
+const StackStatistics::Link& LinkLayer::GetStatistics() const
 {
-	assert(ctx.pRouter == nullptr);
-	ctx.pRouter = &router;
+	return this->ctx.statistics;
+}
+
+void LinkLayer::SetRouter(ILinkTx& router)
+{
+	assert(ctx.linktx == nullptr);
+	ctx.linktx = &router;
 }
 
 ////////////////////////////////
 // ILowerLayer
 ////////////////////////////////
 
-void LinkLayer::Send(ITransportSegment& segments)
+bool LinkLayer::Send(ITransportSegment& segments)
 {
+	if (!ctx.isOnline) return false;
+
 	if (ctx.SetTxSegment(segments))
 	{
 		ctx.TryStartTransmission();
 	}
+
+	return true;
 }
 
 ////////////////////////////////

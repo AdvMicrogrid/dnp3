@@ -21,45 +21,34 @@
 #ifndef OPENDNP3_CELL_H
 #define OPENDNP3_CELL_H
 
-
 namespace opendnp3
 {
 
 /**
 * Type used to record whether a value is requested in a response
 */
-template <class ValueType>
+template <class Spec>
 struct SelectedValue
 {
-	SelectedValue() : selected(false), value(), variation(ValueType::DefaultStaticVariation)
+	SelectedValue() : selected(false), value(), variation(Spec::DefaultStaticVariation)
 	{}
 
 	bool selected;
-	ValueType value;
-	typename ValueType::StaticVariation variation;
+	typename Spec::meas_t value;
+	typename Spec::static_variation_t variation;
 };
 
 /**
 * Holds particular measurement type in the database.
 */
-template <class ValueType>
+template <class Spec>
 struct Cell
 {
-	Cell() : value(), vIndex(0), variation(ValueType::DefaultStaticVariation)
-	{}
+	typename Spec::meas_t value;			// current value
+	typename Spec::config_t config;			// configuration
+	typename Spec::event_cell_t event;		// event cell
+	SelectedValue<Spec> selection;			// selected value
 
-	void SetInitialValue(const ValueType& value_)
-	{
-		value = value_;
-		metadata.SetEventValue(value_);
-	}
-
-	ValueType value;
-	uint16_t vIndex; // virtual index for discontiguous data, as opposed to the raw array index
-	typename ValueType::StaticVariation variation;
-	typename ValueType::MetadataType metadata;
-
-	SelectedValue<ValueType> selection;
 };
 
 

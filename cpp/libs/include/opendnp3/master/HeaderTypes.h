@@ -25,6 +25,7 @@
 
 #include "opendnp3/gen/QualifierCode.h"
 #include "opendnp3/app/GroupVariationID.h"
+#include "opendnp3/gen/PointClass.h"
 
 namespace opendnp3
 {
@@ -36,11 +37,11 @@ class HeaderWriter;
 */
 enum class HeaderType : uint8_t
 {
-    AllObjects,
-    Ranged8,
-    Ranged16,
-    LimitedCount8,
-    LimitedCount16
+	AllObjects,
+	Ranged8,
+	Ranged16,
+	LimitedCount8,
+	LimitedCount16
 };
 
 /**
@@ -88,6 +89,11 @@ public:
 	static Header AllObjects(uint8_t group, uint8_t variation);
 
 	/**
+	* Create an all objects (0x06) header
+	*/
+	static Header From(PointClass pc);
+
+	/**
 	* Create a 8-bit start stop header (0x00)
 	*/
 	static Header Range8(uint8_t group, uint8_t variation, uint8_t start, uint8_t stop);
@@ -107,13 +113,12 @@ public:
 	*/
 	static Header Count16(uint8_t group, uint8_t variation, uint16_t count);
 
-	Header() : id(0, 0), type(HeaderType::AllObjects)
-	{}
+	Header() {}
 
 private:
 
 	opendnp3::GroupVariationID id;
-	HeaderType type;
+	HeaderType type = HeaderType::AllObjects;
 	HeaderUnion value;
 
 	Header(uint8_t group, uint8_t var);

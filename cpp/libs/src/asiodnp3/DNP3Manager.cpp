@@ -20,115 +20,110 @@
  */
 #include "asiodnp3/DNP3Manager.h"
 
-
-#include <opendnp3/LogLevels.h>
-
-#include <asiopal/PhysicalLayerSerial.h>
-#include <asiopal/PhysicalLayerTCPClient.h>
-#include <asiopal/PhysicalLayerTCPServer.h>
-
-#ifdef OPENDNP3_USE_TLS
-#include <asiopal/tls/PhysicalLayerTLSClient.h>
-#include <asiopal/tls/PhysicalLayerTLSServer.h>
-#endif
-
-#include "asiodnp3/ManagerImpl.h"
-
-using namespace openpal;
+#include "asiodnp3/DNP3ManagerImpl.h"
 
 namespace asiodnp3
 {
-
 
 DNP3Manager::DNP3Manager(
     uint32_t concurrencyHint,
     std::shared_ptr<openpal::ILogHandler> handler,
     std::function<void()> onThreadStart,
     std::function<void()> onThreadExit) :
-	impl(new ManagerImpl(concurrencyHint, handler, onThreadStart, onThreadExit))
+	impl(std::make_unique<DNP3ManagerImpl>(concurrencyHint, handler, onThreadStart, onThreadExit))
 {
 
 }
 
-// this has to be here b/c of forward declared ManagerImpl
 DNP3Manager::~DNP3Manager()
-{
-
-}
+{}
 
 void DNP3Manager::Shutdown()
 {
-	impl->channels.Shutdown();
+	impl->Shutdown();
 }
 
-IChannel* DNP3Manager::AddTCPClient(
-    char const* id,
+std::shared_ptr<IChannel> DNP3Manager::AddTCPClient(
+    const std::string& id,
     uint32_t levels,
-    const opendnp3::ChannelRetry& retry,
-    const std::string& host,
-    const std::string& local,
-    uint16_t port)
-{
-	auto pRoot = new LogRoot(impl->handler.get(), id, levels);
-	auto pPhys = new asiopal::PhysicalLayerTCPClient(*pRoot, impl->threadpool.GetIOService(), host, local, port);
-	return impl->channels.CreateChannel(pRoot, pPhys->executor, retry, pPhys);
-}
-
-IChannel* DNP3Manager::AddTCPServer(
-    char const* id,
-    uint32_t levels,
-    const opendnp3::ChannelRetry& retry,
-    const std::string& endpoint,
-    uint16_t port)
-{
-	auto pRoot = new LogRoot(impl->handler.get(), id, levels);
-	auto pPhys = new asiopal::PhysicalLayerTCPServer(*pRoot, impl->threadpool.GetIOService(), endpoint, port);
-	return impl->channels.CreateChannel(pRoot, pPhys->executor, retry, pPhys);
-}
-
-IChannel* DNP3Manager::AddSerial(
-    char const* id,
-    uint32_t levels,
-    const opendnp3::ChannelRetry& retry,
-    asiopal::SerialSettings settings)
-{
-	auto pRoot = new LogRoot(impl->handler.get(), id, levels);
-	auto pPhys = new asiopal::PhysicalLayerSerial(*pRoot, impl->threadpool.GetIOService(), settings);
-	return impl->channels.CreateChannel(pRoot, pPhys->executor, retry, pPhys);
-}
-
-#ifdef OPENDNP3_USE_TLS
-
-IChannel* DNP3Manager::AddTLSClient(
-    char const* id,
-    uint32_t levels,
-    const opendnp3::ChannelRetry& retry,
+    const asiopal::ChannelRetry& retry,
     const std::string& host,
     const std::string& local,
     uint16_t port,
-    const asiopal::TLSConfig& config)
+    std::shared_ptr<IChannelListener> listener)
 {
-	auto pRoot = new LogRoot(impl->handler.get(), id, levels);
-	auto pPhys = new asiopal::PhysicalLayerTLSClient(*pRoot, impl->threadpool.GetIOService(), host, local, port, config);
-	return impl->channels.CreateChannel(pRoot, pPhys->executor, retry, pPhys);
+	return this->impl->AddTCPClient(id, levels, retry, host, local, port, listener);
 }
 
-IChannel* DNP3Manager::AddTLSServer(
-    char const* id,
+std::shared_ptr<IChannel> DNP3Manager::AddTCPServer(
+    const std::string& id,
     uint32_t levels,
-    const opendnp3::ChannelRetry& retry,
+    const asiopal::ChannelRetry& retry,
     const std::string& endpoint,
     uint16_t port,
-    const asiopal::TLSConfig& config)
+    std::shared_ptr<IChannelListener> listener)
 {
-	auto pRoot = new LogRoot(impl->handler.get(), id, levels);
-	auto pPhys = new asiopal::PhysicalLayerTLSServer(*pRoot, impl->threadpool.GetIOService(), endpoint, port, config);
-	return impl->channels.CreateChannel(pRoot, pPhys->executor, retry, pPhys);
+	return this->impl->AddTCPServer(id, levels, retry, endpoint, port, listener);
 }
 
-#endif
-
-
-
+std::shared_ptr<IChannel> DNP3Manager::AddSerial(
+    const std::string& id,
+    uint32_t levels,
+    const asiopal::ChannelRetry& retry,
+    asiopal::SerialSettings settings,
+    std::shared_ptr<IChannelListener> listener)
+{
+	return this->impl->AddSerial(id, levels, retry, settings, listener);
 }
 
+std::shared_ptr<IChannel> DNP3Manager::AddTLSClient(
+    const std::string& id,
+    uint32_t levels,
+    const asiopal::ChannelRetry& retry,
+    const std::string& host,
+    const std::string& local,
+    uint16_t port,
+    const asiopal::TLSConfig& config,
+    std::shared_ptr<IChannelListener> listener,
+    std::error_code& ec)
+{
+	return this->impl->AddTLSClient(id, levels, retry, host, local, port, config, listener, ec);
+}
+
+std::shared_ptr<IChannel> DNP3Manager::AddTLSServer(
+    const std::string& id,
+    uint32_t levels,
+    const asiopal::ChannelRetry& retry,
+    const std::string& endpoint,
+    uint16_t port,
+    const asiopal::TLSConfig& config,
+    std::shared_ptr<IChannelListener> listener,
+    std::error_code& ec)
+{
+	return this->impl->AddTLSServer(id, levels, retry, endpoint, port, config, listener, ec);
+}
+
+std::shared_ptr<asiopal::IListener> DNP3Manager::CreateListener(
+    std::string loggerid,
+    openpal::LogFilters loglevel,
+    asiopal::IPEndpoint endpoint,
+    std::shared_ptr<IListenCallbacks> callbacks,
+    std::error_code& ec
+)
+{
+	return impl->CreateListener(loggerid, loglevel, endpoint, callbacks, ec);
+}
+
+std::shared_ptr<asiopal::IListener> DNP3Manager::CreateListener(
+    std::string loggerid,
+    openpal::LogFilters loglevel,
+    asiopal::IPEndpoint endpoint,
+    const asiopal::TLSConfig& config,
+    std::shared_ptr<IListenCallbacks> callbacks,
+    std::error_code& ec
+)
+{
+	return impl->CreateListener(loggerid, loglevel, endpoint, config, callbacks, ec);
+}
+
+}

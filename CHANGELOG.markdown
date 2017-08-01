@@ -1,3 +1,32 @@
+### 2.2.0 ###
+* No changes from 2.2.0-RC5
+
+### 2.2.0-RC5 ###
+* :beetle: Fixed a [bug](https://github.com/automatak/dnp3/issues/200) where connection attempts were not retrieved after failed DNS resolution.
+
+### 2.2.0-RC4 ###
+* :beetle: Fixed a [regression](https://github.com/automatak/dnp3/issues/197) in outstation whereby the session could hang indefinitely if a non-read request was received during UnsolConirmWait.
+
+### 2.2.0-RC3 ###
+* :beetle: Fixed a [regression](https://github.com/automatak/dnp3/issues/195) whereby multi segment messages could be transmitted with trailing garbage.
+* :beetle: Fixed a bug whereby improper TLS shutdown from the remote host could result in an infinite loop. TLS shutdown is no longer utilized in favor of just a hard TCP close.
+
+### 2.2.0-RC2 ###
+* :beetle: Java bindings in 2.2.0-RC1 were leaking local references. Modified the bindings to use resource management class to ensure this doens't happen going forward.
+* :beetle: Fixed a [bug](https://github.com/automatak/dnp3/issues/187) in outstation/master enable/disable that put the session into an invalid state.
+
+### 2.2.0-RC1 ###
+* :star: Java bindings have been added to the project.
+* :star: New API for creating "masters as servers" (aka GPRS-based systems)
+* :wrench: DNP3Manager now returns shared_ptr<IChannel>. IChannel now returns shared_ptr<IMaster/IOutstation>. Shutdown is now idempotent on
+these interfaces used via shared_ptr.
+* :wrench: Channel, master, and outstation now accept all callback interfaces via shared_ptr.
+* :wrench: The external format for statistics has been changed to ease maintainence. Each class now owns the statistics it increments.
+* :beetle: Fixed a [bug](https://github.com/automatak/dnp3/issues/175) where the keep-alive timer would rapidly fire in C# if set to Timespan.MaxValue.
+* :beetle: Fixed a [bug](https://github.com/automatak/dnp3/issues/164) in the outstation state machine where it would incorrectly ignore repeat READ requests.
+* :beetle: Fixed a bug in the ASDU formatting where a request for a range of 255 measurement values would result in a malformed response.
+* :beetle: Fixed a [bug](https://github.com/automatak/dnp3/issues/173) in the TLS client that caused the channel to be unrecoverable after any disconnect.
+
 ### 2.1.0 ###
 * Minor formatting and documentation tweaks
 

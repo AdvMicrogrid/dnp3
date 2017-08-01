@@ -24,7 +24,6 @@
 #include "opendnp3/app/ITransactable.h"
 
 #include "opendnp3/app/MeasurementTypes.h"
-#include "opendnp3/app/TimeAndInterval.h"
 #include "opendnp3/app/BinaryCommandEvent.h"
 #include "opendnp3/app/AnalogCommandEvent.h"
 #include "opendnp3/app/OctetString.h"
@@ -34,6 +33,7 @@
 #include "opendnp3/app/parsing/ICollection.h"
 
 #include "opendnp3/master/HeaderInfo.h"
+#include "openpal/executor/UTCTimestamp.h"
 
 namespace opendnp3
 {
@@ -62,6 +62,7 @@ public:
 	virtual void Process(const HeaderInfo& info, const ICollection<Indexed<BinaryCommandEvent>>& values) = 0;
 	virtual void Process(const HeaderInfo& info, const ICollection<Indexed<AnalogCommandEvent>>& values) = 0;
 	virtual void Process(const HeaderInfo& info, const ICollection<Indexed<SecurityStat>>& values) = 0;
+	virtual void Process(const HeaderInfo& info, const ICollection<DNPTime>& values) = 0;
 
 	virtual ~ISOEHandler() {}
 };

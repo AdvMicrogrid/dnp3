@@ -34,31 +34,23 @@ namespace opendnp3
 /**
 The database coordinates all updates of measurement data
 */
-class Database : public IDatabase, private openpal::Uncopyable
+class Database final : public IDatabase, private openpal::Uncopyable
 {
 public:
 
-	Database(const DatabaseTemplate&, IEventReceiver& eventReceiver, IndexMode indexMode, StaticTypeBitField allowedClass0Types);
+	Database(const DatabaseSizes&, IEventReceiver& eventReceiver, IndexMode indexMode, StaticTypeBitField allowedClass0Types);
 
 	// ------- IDatabase --------------
 
-	virtual bool Update(const Binary&, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Update(const DoubleBitBinary&, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Update(const Analog&, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Update(const Counter&, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Update(const FrozenCounter&, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Update(const BinaryOutputStatus&, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Update(const AnalogOutputStatus&, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Update(const TimeAndInterval&, uint16_t) override final;
-
-	virtual bool Modify(const openpal::Function1<const Binary&, Binary>& modify, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Modify(const openpal::Function1<const DoubleBitBinary&, DoubleBitBinary>& modify, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Modify(const openpal::Function1<const Analog&, Analog>& modify, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Modify(const openpal::Function1<const Counter&, Counter>& modify, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Modify(const openpal::Function1<const FrozenCounter&, FrozenCounter>& modify, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Modify(const openpal::Function1<const BinaryOutputStatus&, BinaryOutputStatus>& modify, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Modify(const openpal::Function1<const AnalogOutputStatus&, AnalogOutputStatus>& modify, uint16_t, EventMode = EventMode::Detect) override final;
-	virtual bool Modify(const openpal::Function1<const TimeAndInterval&, TimeAndInterval>& modify, uint16_t index) override final;
+	virtual bool Update(const Binary&, uint16_t, EventMode = EventMode::Detect) override;
+	virtual bool Update(const DoubleBitBinary&, uint16_t, EventMode = EventMode::Detect) override;
+	virtual bool Update(const Analog&, uint16_t, EventMode = EventMode::Detect) override;
+	virtual bool Update(const Counter&, uint16_t, EventMode = EventMode::Detect) override;
+	virtual bool Update(const FrozenCounter&, uint16_t, EventMode = EventMode::Detect) override;
+	virtual bool Update(const BinaryOutputStatus&, uint16_t, EventMode = EventMode::Detect) override;
+	virtual bool Update(const AnalogOutputStatus&, uint16_t, EventMode = EventMode::Detect) override;
+	virtual bool Update(const TimeAndInterval&, uint16_t) override;
+	virtual bool Modify(FlagsType type, uint16_t start, uint16_t stop, uint8_t flags) override;
 
 	// ------- Misc ---------------
 
@@ -85,111 +77,28 @@ public:
 
 private:
 
-	template <class T>
+	template <class Spec>
 	uint16_t GetRawIndex(uint16_t index);
 
-	IEventReceiver* pEventReceiver;
+	IEventReceiver* eventReceiver;
 	IndexMode indexMode;
-
 
 	static bool ConvertToEventClass(PointClass pc, EventClass& ec);
 
-	template <class T>
-	bool UpdateEvent(const T& value, uint16_t index, EventMode mode);
+	template <class Spec>
+	bool UpdateEvent(const typename Spec::meas_t& value, uint16_t index, EventMode mode);
 
-	template <class T>
-	bool ModifyEvent(const openpal::Function1<const T&, T>& modify, uint16_t index, EventMode mode);
+	template <class Spec>
+	bool UpdateAny(Cell<Spec>& cell, const typename Spec::meas_t& value, EventMode mode);
 
-	template <class T>
-	bool UpdateAny(Cell<T>& cell, const T& value, EventMode mode);
+	template <class Spec>
+	bool Modify(uint16_t start, uint16_t stop, uint8_t flags);
 
 	// stores the most recent values, selected values, and metadata
 	DatabaseBuffers buffers;
 };
 
-template <class T>
-uint16_t Database::GetRawIndex(uint16_t index)
-{
-	if (indexMode == IndexMode::Contiguous)
-	{
-		return index;
-	}
-	else
-	{
-		auto view = buffers.buffers.GetArrayView<T>();
-		auto result = IndexSearch::FindClosestRawIndex(view, index);
-		return result.match ? result.index : openpal::MaxValue<uint16_t>();
-	}
-}
 
-template <class T>
-bool Database::UpdateEvent(const T& value, uint16_t index, EventMode mode)
-{
-	auto rawIndex = GetRawIndex<T>(index);
-	auto view = buffers.buffers.GetArrayView<T>();
-
-	if (view.Contains(rawIndex))
-	{
-		this->UpdateAny(view[rawIndex], value, mode);
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
-
-template <class T>
-bool Database::ModifyEvent(const openpal::Function1<const T&, T>& modify, uint16_t index, EventMode mode)
-{
-	auto rawIndex = GetRawIndex<T>(index);
-	auto view = buffers.buffers.GetArrayView<T>();
-
-	if (view.Contains(rawIndex))
-	{
-		this->UpdateAny(view[rawIndex], modify.Apply(view[rawIndex].value), mode);
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
-
-template <class T>
-bool Database::UpdateAny(Cell<T>& cell, const T& value, EventMode mode)
-{
-	EventClass ec;
-	if (ConvertToEventClass(cell.metadata.clazz, ec))
-	{
-		bool createEvent = false;
-
-		switch (mode)
-		{
-		case(EventMode::Force) :
-			createEvent = true;
-			break;
-		case(EventMode::Detect):
-			createEvent = cell.metadata.IsEvent(value);
-			break;
-		default:
-			break;
-		}
-
-		if (createEvent)
-		{
-			cell.metadata.lastEvent = value;
-
-			if (pEventReceiver)
-			{
-				pEventReceiver->Update(Event<T>(value, cell.vIndex, ec, cell.metadata.variation));
-			}
-		}
-	}
-
-	cell.value = value;
-	return true;
-}
 
 }
 
